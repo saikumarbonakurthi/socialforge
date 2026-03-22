@@ -1,6 +1,7 @@
 // src/server.js — SocialForge Backend Entry Point
 require("dotenv").config();
 
+const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const queueRoutes = require("./routes/queue");
@@ -32,8 +33,12 @@ app.use((req, res, next) => {
 // ── Routes ────────────────────────────────────────────────────
 app.use("/api/queue", queueRoutes);
 
-// Root
-app.get("/", (req, res) => {
+// ── Serve Frontend Build ──────────────────────────────────────
+const frontendDist = path.join(__dirname, "..", "frontend", "dist");
+app.use(express.static(frontendDist));
+
+// API info endpoint
+app.get("/api/info", (req, res) => {
   res.json({
     name: "SocialForge Backend",
     version: "1.0.0",
@@ -48,6 +53,12 @@ app.get("/", (req, res) => {
       stats:     "GET  /api/queue/stats",
     },
   });
+});
+
+// SPA fallback — serve index.html for all non-API routes
+app.get("*", (req, res, next) => {
+  if (req.path.startsWith("/api")) return next();
+  res.sendFile(path.join(frontendDist, "index.html"));
 });
 
 // Global error handler
