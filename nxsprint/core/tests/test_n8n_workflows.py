@@ -13,6 +13,8 @@ EXPECTED_SCHEDULE = {
     "cron-sync": ("minutes", 15),
     "cron-nudges": ("hours", 1),
     "deliver-outbox": ("minutes", 1),
+    "deliver-bot": ("minutes", 1),
+    "cron-standup": ("cronExpression", "*/15 * * * 1-5"),
 }
 
 
@@ -37,7 +39,10 @@ def test_structure(path):
     triggers = [n for n in wf["nodes"] if n["type"].endswith("scheduleTrigger")]
     assert len(triggers) == 1
     rule = triggers[0]["parameters"]["rule"]["interval"][0]
-    assert (rule["field"], rule[f"{rule['field']}Interval"]) == EXPECTED_SCHEDULE[path.stem]
+    if rule["field"] == "cronExpression":
+        assert (rule["field"], rule["expression"]) == EXPECTED_SCHEDULE[path.stem]
+    else:
+        assert (rule["field"], rule[f"{rule['field']}Interval"]) == EXPECTED_SCHEDULE[path.stem]
 
 
 @pytest.mark.parametrize("path", FILES, ids=lambda p: p.stem)

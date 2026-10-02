@@ -14,6 +14,7 @@ projects:
     quiet_hours: {start: "19:00", end: "09:00"}
     holidays: []
     standup_time: "09:45"
+    standup_summary_time: "10:30"
     members:
       - {name: Asha, github_login: asha-demo, teams_user_id: demo-asha, role: lead,
          timezone: Asia/Kolkata, capacity_points: 20}

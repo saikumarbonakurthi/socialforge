@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     price_output_per_mtok: float | None = Field(default=None, gt=0)
     # While set, live delivery sends every message to this target instead of the real person.
     delivery_redirect_target: str | None = None
+    # Azure Bot registration (Phase 5). All three or none.
+    bot_app_id: str | None = None
+    bot_app_password: str | None = None
+    bot_tenant_id: str | None = None
     github_token: str | None = None  # read-only scope for sync (rule 2)
     github_webhook_secret: str | None = None
 
@@ -47,6 +51,19 @@ class Settings(BaseSettings):
             raise ValueError(
                 "NXSPRINT_MODEL is set, so NXSPRINT_MAX_DAILY_USD, NXSPRINT_PRICE_INPUT_PER_MTOK and "
                 "NXSPRINT_PRICE_OUTPUT_PER_MTOK are required (no spending without a ceiling)"
+            )
+        return self
+
+    @property
+    def bot_enabled(self) -> bool:
+        return bool(self.bot_app_id)
+
+    @model_validator(mode="after")
+    def _bot_all_or_none(self) -> "Settings":
+        parts = (self.bot_app_id, self.bot_app_password, self.bot_tenant_id)
+        if any(parts) and not all(parts):
+            raise ValueError(
+                "NXSPRINT_BOT_APP_ID, NXSPRINT_BOT_APP_PASSWORD and NXSPRINT_BOT_TENANT_ID go together"
             )
         return self
 

@@ -8,6 +8,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.config import AppConfig, ConfigError, ProjectCfg
+from app.domain.channels import BOT_CHANNEL, WEBHOOK_CHANNELS, webhook_env_for
 from app.domain.sync import utc
 from app.models import Nudge, Outbox, Project
 from app.settings import Mode
@@ -48,6 +49,26 @@ def _cfg_for(row: Outbox, projects: dict[int, ProjectCfg], single: ProjectCfg | 
     return projects.get(row.project_id) if row.project_id is not None else single
 
 
+def _lease_rows(session: Session, channels: frozenset[str], now: datetime, limit: int) -> list[Outbox]:
+    rows = session.scalars(
+        select(Outbox)
+        .where(
+            Outbox.mode == "live",
+            Outbox.channel.in_(channels),
+            Outbox.delivered_at.is_(None),
+            Outbox.attempts < MAX_ATTEMPTS,
+            or_(Outbox.leased_at.is_(None), Outbox.leased_at < now - LEASE),
+        )
+        .order_by(Outbox.id)
+        .limit(limit)
+        .with_for_update(skip_locked=True)
+    ).all()
+    for row in rows:
+        row.leased_at = now
+        row.attempts += 1
+    return list(rows)
+
+
 def lease_pending(
     session: Session,
     config: AppConfig,
@@ -57,32 +78,17 @@ def lease_pending(
     now: datetime,
     limit: int,
 ) -> list[DeliveryItem]:
-    """Hand out live, undelivered rows and mark them leased. Empty unless the app itself is live."""
+    """Hand out live webhook rows and mark them leased. Empty unless the app itself is live."""
     if mode is not Mode.LIVE:
         return []  # a dry_run app never delivers, even if old live rows exist
     by_name = {p.name: p for p in config.projects}
     projects = {r.id: by_name[r.name] for r in session.scalars(select(Project)) if r.name in by_name}
     single = config.projects[0] if len(config.projects) == 1 else None
 
-    rows = session.scalars(
-        select(Outbox)
-        .where(
-            Outbox.mode == "live",
-            Outbox.delivered_at.is_(None),
-            Outbox.attempts < MAX_ATTEMPTS,
-            or_(Outbox.leased_at.is_(None), Outbox.leased_at < now - LEASE),
-        )
-        .order_by(Outbox.id)
-        .limit(limit)
-        .with_for_update(skip_locked=True)
-    ).all()
-
     items = []
-    for row in rows:
+    for row in _lease_rows(session, WEBHOOK_CHANNELS, now, limit):
         cfg = _cfg_for(row, projects, single)
-        url = env.get(cfg.channels.dm_webhook_env, "") if cfg else ""
-        row.leased_at = now
-        row.attempts += 1
+        url = env.get(webhook_env_for(cfg, row.channel), "") if cfg else ""
         if not url.startswith("https://"):
             row.leased_at = None
             row.last_error = "no webhook configured for this row's project"
@@ -94,6 +100,15 @@ def lease_pending(
         items.append(DeliveryItem(row.id, url, {"channel": row.channel, "target": target, "text": text}))
     session.commit()
     return items
+
+
+def lease_bot_rows(session: Session, mode: Mode, now: datetime, limit: int) -> list[Outbox]:
+    """Live rows that the bot (not n8n) must send. Same lease and retry rules as webhook rows."""
+    if mode is not Mode.LIVE:
+        return []
+    rows = _lease_rows(session, frozenset({BOT_CHANNEL}), now, limit)
+    session.commit()
+    return rows
 
 
 class DeliveryError(ValueError):

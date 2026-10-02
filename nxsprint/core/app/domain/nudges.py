@@ -10,14 +10,13 @@ from sqlalchemy.orm import Session
 from app.config import MemberCfg, ProjectCfg, Role
 from app.domain.board import load_board
 from app.domain.calendar import can_message_now
+from app.domain.channels import BOT_CHANNEL, BOT_FOOTER, dm_channel
 from app.domain.messages import render
 from app.domain.rules import Finding, run_rules
 from app.domain.sync import utc
 from app.llm.phraser import Phraser
 from app.models import Member, Nudge, Outbox, Project
 from app.settings import Mode
-
-CHANNEL = "teams_dm"
 
 
 @dataclass
@@ -65,6 +64,7 @@ def run_nudges(
     mode: Mode,
     now: datetime,
     phraser: Phraser | None = None,
+    use_bot: bool = False,
 ) -> NudgeRun:
     run = NudgeRun()
     findings = run_rules(load_board(session, project, cfg, now))
@@ -94,12 +94,13 @@ def run_nudges(
             run.phrasing[
                 "llm" if phrased.source == "llm" else f"template:{phrased.reason.split(':')[0]}"
             ] += 1
+        channel = dm_channel(session, members[target.github_login].id, use_bot)
         nudge = Nudge(
             project_id=project.id,
             member_id=members[target.github_login].id,
             issue_node_id=f.issue_node_id,
             rule=f.rule_id,
-            channel=CHANNEL,
+            channel=channel,
             message=body,
             status="queued",
             created_at=now,
@@ -111,9 +112,9 @@ def run_nudges(
             Outbox(
                 project_id=project.id,
                 nudge_id=nudge.id,
-                channel=CHANNEL,
+                channel=channel,
                 target=target.teams_user_id,
-                body=body,
+                body=f"{body}\n\n{BOT_FOOTER}" if channel == BOT_CHANNEL else body,
                 mode=mode.value,
                 created_at=now,
             )

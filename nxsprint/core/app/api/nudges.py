@@ -50,7 +50,8 @@ def run_nudge_job(request: Request, db: Session = Depends(get_db)) -> dict:
         if project is None:
             out.append({"project": cfg.name, "error": "not synced yet, run /jobs/sync first"})
             continue
-        r = run_nudges(db, project, cfg, state.settings.mode, now, getattr(state, "phraser", None))
+        use_bot = state.settings.bot_enabled and not state.settings.delivery_redirect_target
+        r = run_nudges(db, project, cfg, state.settings.mode, now, getattr(state, "phraser", None), use_bot)
         out.append(
             {
                 "project": cfg.name,

@@ -7,8 +7,10 @@ n8n is only the scheduler and the courier. All logic and all state live in core.
 | `cron-sync` | every 15 minutes | `POST /jobs/sync` |
 | `cron-nudges` | every hour | `POST /jobs/nudges` (core skips quiet hours, weekends and holidays per member) |
 | `deliver-outbox` | every minute | `GET /outbox/pending`, posts each item, then `POST /outbox/{id}/sent` or `/failed` |
+| `cron-standup` | every 15 minutes on weekdays | `POST /jobs/standup`, then `POST /jobs/standup_summary`. Core decides what is due, so extra knocks do nothing |
+| `deliver-bot` | every minute | `POST /jobs/deliver_bot`. Core sends live bot DMs itself because the bot token never leaves core |
 
-Not built yet because core has no endpoint for them: `cron-standup` (Phase 5), `cron-weekly-report` (Phase 6), `escalation-whatsapp` (Phase 7).
+Not built yet because core has no endpoint for them: `cron-weekly-report` (Phase 6), `escalation-whatsapp` (Phase 7).
 
 ## Credentials
 None are stored in n8n. The workflows read two environment variables, set by `docker-compose.yml`:
@@ -17,7 +19,7 @@ The Teams webhook URL is a secret and stays in core's environment. Core returns 
 
 ## Import
 1. `make up`, then open http://localhost:5678 and create the owner account.
-2. For each file in `n8n/workflows/`: Workflows, menu, Import from file.
+2. Skip `deliver-bot` and `cron-standup` if you have not set up the bot (`docs/teams-setup.md`), `deliver-bot` answers 503 without it. For each file in `n8n/workflows/`: Workflows, menu, Import from file.
 3. Open each workflow once and check the HTTP nodes show no red warnings.
 4. Activate `cron-sync` and `cron-nudges`. Activating `deliver-outbox` is safe in dry run: while core is in `dry_run` it always returns an empty list.
 

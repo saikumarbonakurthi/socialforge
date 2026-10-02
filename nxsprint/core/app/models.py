@@ -2,7 +2,18 @@
 
 from datetime import UTC, date, datetime
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -125,4 +136,39 @@ class LlmCall(Base):
     output_tokens: Mapped[int] = mapped_column(Integer)
     cost_estimate: Mapped[float] = mapped_column(Float)
     latency_ms: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class TeamsConversation(Base):
+    """Where the bot can reach a member. Learned from a verified inbound activity, never typed in."""
+
+    __tablename__ = "teams_conversation"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    member_id: Mapped[int] = mapped_column(ForeignKey("member.id"), unique=True)
+    service_url: Mapped[str] = mapped_column(Text)
+    conversation_id: Mapped[str] = mapped_column(String(300))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class StandupPrompt(Base):
+    __tablename__ = "standup_prompt"
+    __table_args__ = (UniqueConstraint("member_id", "standup_date"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("project.id"), index=True)
+    member_id: Mapped[int] = mapped_column(ForeignKey("member.id"))
+    standup_date: Mapped[date] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class StandupResponse(Base):
+    __tablename__ = "standup_response"
+    __table_args__ = (UniqueConstraint("member_id", "standup_date"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("project.id"), index=True)
+    member_id: Mapped[int] = mapped_column(ForeignKey("member.id"))
+    standup_date: Mapped[date] = mapped_column(Date)
+    raw_text: Mapped[str] = mapped_column(Text)
+    done: Mapped[str | None] = mapped_column(Text)
+    doing: Mapped[str | None] = mapped_column(Text)
+    blocked: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

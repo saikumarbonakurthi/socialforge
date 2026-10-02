@@ -11,14 +11,16 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
-from app.config import load_config
+from app.config import AppConfig, load_config
 from app.db import make_engine, make_session_factory
 from app.domain.board import load_board
+from app.domain.bot_inbound import handle_activity
 from app.domain.calendar import is_working_day, working_days_between
 from app.domain.nudges import run_nudges
+from app.domain.standup import post_standup_summary, run_standup_prompts
 from app.domain.sync import sync_project
 from app.integrations.github import ProjectData, WorkItem
-from app.models import Base, Member, Project
+from app.models import Base, Member, Outbox, Project
 from app.settings import Mode
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "config" / "projects.example.yaml"
@@ -82,6 +84,31 @@ def demo_clock(cfg) -> datetime:
     return day.astimezone(UTC)
 
 
+def standup_demo(session, cfg, project, now) -> None:
+    """Prompts at the start of the window, one simulated reply from Ravi, then the team summary."""
+    day = now.astimezone(ZoneInfo(cfg.timezone)).date()
+    at = lambda t: datetime.combine(day, t, tzinfo=ZoneInfo(cfg.timezone)).astimezone(UTC)  # noqa: E731
+    prompt_at = at(cfg.standup_time) + timedelta(minutes=15)
+    run = run_standup_prompts(session, project, cfg, Mode.DRY_RUN, prompt_at, use_bot=False)
+    print(
+        f"\nStandup at {prompt_at.astimezone(ZoneInfo(cfg.timezone)):%H:%M}: {run.prompted} prompts queued."
+    )
+    first = session.scalars(select(Outbox).where(Outbox.body.like("Hi Ravi, it is standup%"))).first()
+    print(f"\nPrompt to Ravi:\n{first.body}\n")
+    ravi = session.scalar(select(Member).where(Member.github_login == "ravi-demo"))
+    activity = {
+        "type": "message", "serviceUrl": "https://smba.example/", "conversation": {"id": "demo"},
+        "from": {"id": "29:ravi", "aadObjectId": ravi.teams_user_id},
+        "text": "Done: fixed invoice rounding. Doing: audit log API. Blocked: waiting on payment sandbox keys",
+    }  # fmt: skip
+    handle_activity(
+        session, AppConfig(projects=[cfg], placeholder=True), activity, prompt_at + timedelta(minutes=5)
+    )
+    why = post_standup_summary(session, project, cfg, Mode.DRY_RUN, at(cfg.standup_summary_time))
+    summary = session.scalars(select(Outbox).where(Outbox.channel == "teams_team")).first()
+    print("Team summary (Asha did not reply):\n" + (summary.body if summary else f"not posted: {why}"))
+
+
 def main() -> int:
     cfg_path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_CONFIG
     cfg = load_config(cfg_path, Mode.DRY_RUN).projects[0]
@@ -116,6 +143,8 @@ def main() -> int:
     again = run_nudges(session, project, cfg, Mode.DRY_RUN, now)
     created, skipped = len(again.created), again.skipped_cooldown
     print(f"Running again straight away creates {created} (skipped {skipped} on cooldown).")
+
+    standup_demo(session, cfg, project, now)
     return 0
 
 

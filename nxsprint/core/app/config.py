@@ -137,6 +137,7 @@ class ProjectCfg(_Strict):
     quiet_hours: Window
     holidays: list[date]  # explicit, may be empty
     standup_time: time
+    standup_summary_time: time  # the team summary is posted from this time on
     members: list[MemberCfg] = Field(min_length=1)
     cooldowns: Cooldowns
     thresholds: Thresholds
@@ -151,6 +152,12 @@ class ProjectCfg(_Strict):
         if not v or any(d < 1 or d > 7 for d in v) or len(set(v)) != len(v):
             raise ValueError("working_days must be unique ISO weekdays 1 to 7")
         return v
+
+    @model_validator(mode="after")
+    def _summary_after_prompt(self) -> "ProjectCfg":
+        if self.standup_summary_time <= self.standup_time:
+            raise ValueError("standup_summary_time must be later than standup_time")
+        return self
 
     @model_validator(mode="after")
     def _one_lead(self) -> "ProjectCfg":
