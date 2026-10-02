@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      retries: 10
+
+  core:
+    build: ./core
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NXSPRINT_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      NXSPRINT_CONFIG_PATH: /config/projects.yaml
+    volumes: ["./config:/config:ro"]
+    ports: ["8000:8000"]
+    depends_on:
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    ports: ["5678:5678"]
+    environment:
+      NXSPRINT_CORE_URL: http://core:8000
+      NXSPRINT_API_SECRET: ${NXSPRINT_API_SECRET}
+      # Workflows read the two variables above with $env, which newer n8n blocks unless told otherwise.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+    volumes: [n8ndata:/home/node/.n8n]
+    depends_on:
+      core: {condition: service_healthy}
+
+volumes:
+  pgdata:
+  n8ndata:

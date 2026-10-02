@@ -1,0 +1,9 @@
+{"data":{"organization":{"projectV2":{"id":"PVT_1","items":{
+ "pageInfo":{"hasNextPage":false,"endCursor":null},
+ "nodes":[
+  {"id":"PVTI_3","updatedAt":"2026-09-27T10:00:00Z",
+   "fieldValues":{"nodes":[{"name":"Done","field":{"name":"Status"}}]},
+   "content":{"__typename":"PullRequest","id":"PR_3","title":"Fix rounding","url":"https://github.com/o/r/pull/3",
+     "updatedAt":"2026-09-27T10:00:00Z","assignees":{"nodes":[{"login":"ravi-demo"}]},"labels":{"nodes":[]}}},
+  {"id":"PVTI_4","updatedAt":"2026-09-26T10:00:00Z","fieldValues":{"nodes":[]},"content":null}
+ ]}}}}}
