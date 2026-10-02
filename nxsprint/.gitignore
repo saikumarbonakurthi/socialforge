@@ -1,0 +1,10 @@
+.env
+config/projects.yaml
+*.db
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.coverage
+*.egg-info/
+.venv/
+backups/

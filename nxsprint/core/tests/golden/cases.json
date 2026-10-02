@@ -1,0 +1,257 @@
+[
+ {
+  "id": "stale",
+  "first_name": "Ravi",
+  "finding": {
+   "rule_id": "STALE_IN_PROGRESS",
+   "severity": "medium",
+   "member": "ravi-demo",
+   "issue_node_id": "I_1",
+   "title": "Login page redesign",
+   "url": "https://github.com/sria-demo/demo-app/issues/1",
+   "evidence": {
+    "working_days_since_update": 3,
+    "working_days_in_status": 4
+   }
+  },
+  "good": [
+   "Hi Ravi, we noticed Login page redesign has had no update for 3 working days. Could you share a quick note on where it stands, or tell us what is in the way? {link}"
+  ],
+  "bad": [
+   {
+    "text": "Hi Ravi, Login page redesign has been quiet for 5 working days. Could you update us? {link}",
+    "expect": [
+     "invented_number"
+    ]
+   },
+   {
+    "text": "Hi Ravi, Login page redesign has had no update for 3 working days — are you stuck? {link}",
+    "expect": [
+     "dash"
+    ]
+   },
+   {
+    "text": "Hi Ravi, Login page redesign has had no update for 3 working days. Any news? https://github.com/sria-demo/demo-app/issues/99",
+    "expect": [
+     "invented_link_or_mention",
+     "link"
+    ]
+   },
+   {
+    "text": "Hi Ravi, that page has had no update for 3 working days. Any news? {link}",
+    "expect": [
+     "title_missing"
+    ]
+   },
+   {
+    "text": "Hey Ravi, Login page redesign has had no update for 3 working days. Any news? {link}",
+    "expect": [
+     "greeting"
+    ]
+   },
+   {
+    "text": "Hi Ravi, Login page redesign has had no update for 3 working days. Any news?",
+    "expect": [
+     "link"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "unassigned",
+  "first_name": "Asha",
+  "finding": {
+   "rule_id": "UNASSIGNED_IN_SPRINT",
+   "severity": "medium",
+   "member": null,
+   "issue_node_id": "I_2",
+   "title": "Export to CSV",
+   "url": "https://github.com/sria-demo/demo-app/issues/3",
+   "evidence": {
+    "reason": "no_owner",
+    "sprint": "Sprint 12",
+    "previous_owner": null
+   }
+  },
+  "good": [
+   "Hi Asha, Export to CSV is in Sprint 12 but nobody owns it yet. Could you pick an owner for it? {link}"
+  ],
+  "bad": [
+   {
+    "text": "Hi Asha, Export to CSV is in Sprint 13 with no owner. Could you pick one? {link}",
+    "expect": [
+     "invented_number"
+    ]
+   },
+   {
+    "text": "Hi Asha, Export to CSV is in Sprint 12 with no owner.\n\n**Please assign it.**\n\n- Asha {link}",
+    "expect": [
+     "formatting"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "overloaded",
+  "first_name": "Ravi",
+  "finding": {
+   "rule_id": "OVERLOADED_MEMBER",
+   "severity": "medium",
+   "member": "ravi-demo",
+   "issue_node_id": "member:ravi-demo",
+   "title": "workload of Ravi",
+   "url": null,
+   "evidence": {
+    "sprint": "Sprint 12",
+    "points": 34.0,
+    "capacity_points": 20.0
+   }
+  },
+  "good": [
+   "Hi Ravi, in Sprint 12 we count 34 points against a capacity of 20 for you. Could we look together at what to move or pause?"
+  ],
+  "bad": [
+   {
+    "text": "Hi Ravi, in Sprint 12 you have 34 points against a capacity of 20. Please see {link}",
+    "expect": [
+     "link"
+    ]
+   },
+   {
+    "text": "Hi Ravi, in Sprint 12 we count 34 points against a capacity of 20, which is 70 percent too many. Can we talk?",
+    "expect": [
+     "invented_number"
+    ]
+   },
+   {
+    "text": "Hi Ravi, in Sprint 12 we count 34 points against a capacity of 20 for you. Talk to @asha about it.",
+    "expect": [
+     "invented_link_or_mention"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "sprint_at_risk",
+  "first_name": "Asha",
+  "finding": {
+   "rule_id": "SPRINT_AT_RISK",
+   "severity": "high",
+   "member": null,
+   "issue_node_id": "sprint:Sprint 12",
+   "title": "Sprint 12",
+   "url": null,
+   "evidence": {
+    "sprint": "Sprint 12",
+    "points_left_pct": 60,
+    "days_left_pct": 30,
+    "points_left": 12,
+    "points_total": 20
+   }
+  },
+  "good": [
+   "Hi Asha, Sprint 12 looks at risk. 60 percent of the points are still open with 30 percent of the working days left. Could we decide together what to cut or move?"
+  ],
+  "bad": [
+   {
+    "text": "Hi Asha, Sprint 12 looks at risk with 60 percent of points open and 30 percent of days left. Follow-up needed.",
+    "expect": [
+     "dash"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "blocked",
+  "first_name": "Ravi",
+  "finding": {
+   "rule_id": "BLOCKED_LABEL_AGING",
+   "severity": "medium",
+   "member": "ravi-demo",
+   "issue_node_id": "I_5",
+   "title": "Payment webhook retries",
+   "url": "https://github.com/sria-demo/demo-app/issues/5",
+   "evidence": {
+    "working_days_blocked": 3
+   }
+  },
+  "good": [
+   "Hi Ravi, Payment webhook retries has carried the blocked label for 3 working days. What would unblock it, and who can help? {link}"
+  ],
+  "bad": [
+   {
+    "text": "Hi Ravi, Payment webhook retries has been blocked for 3 working days. What would unblock it? {link} {link}",
+    "expect": [
+     "link"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "goal_item",
+  "first_name": "Ravi",
+  "finding": {
+   "rule_id": "GOAL_ITEM_NOT_STARTED",
+   "severity": "critical",
+   "member": "ravi-demo",
+   "issue_node_id": "I_7",
+   "title": "Rate limit login",
+   "url": "https://github.com/sria-demo/demo-app/issues/7",
+   "evidence": {
+    "sprint": "Sprint 12",
+    "status": "Todo",
+    "working_days_left": 1
+   }
+  },
+  "good": [
+   "Hi Ravi, Rate limit login is a goal item for Sprint 12 and it has not started, with 1 working day left in the sprint. Can you start it, or tell us what is stopping you? {link}"
+  ],
+  "bad": [
+   {
+    "text": "Hi Ravi, Rate limit login is a goal item for Sprint 12 and has not started, with 3 working days left. Can you start it? {link}",
+    "expect": [
+     "invented_number"
+    ]
+   },
+   {
+    "text": "Hi Ravi, Rate limit login is a goal item for Sprint 12 and has not started. This is critical, drop everything now and call Asha at 9876543210. {link}",
+    "expect": [
+     "invented_number"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "prod_blocker",
+  "first_name": "Asha",
+  "finding": {
+   "rule_id": "PRODUCTION_BLOCKER_UNOWNED",
+   "severity": "critical",
+   "member": null,
+   "issue_node_id": "I_8",
+   "title": "Checkout outage",
+   "url": "https://github.com/sria-demo/demo-app/issues/8",
+   "evidence": {
+    "working_hours_unowned": 4.5
+   }
+  },
+  "good": [
+   "Hi Asha, Checkout outage is a production blocker and it has had no owner for 4.5 working hours. Who can take it now? {link}"
+  ],
+  "bad": [
+   {
+    "text": "Hi Asha, Checkout outage is a production blocker with no owner for 6 working hours. Who can take it now? {link}",
+    "expect": [
+     "invented_number"
+    ]
+   },
+   {
+    "text": "Hi Asha, Checkout outage is a production blocker with no owner for 4.5 working hours. Who can take it now? https://status.example.com",
+    "expect": [
+     "invented_link_or_mention",
+     "link"
+    ]
+   }
+  ]
+ }
+]
