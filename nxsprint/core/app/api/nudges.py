@@ -47,7 +47,7 @@ def run_nudge_job(request: Request, db: Session = Depends(get_db)) -> dict:
         if project is None:
             out.append({"project": cfg.name, "error": "not synced yet, run /jobs/sync first"})
             continue
-        r = run_nudges(db, project, cfg, state.settings.mode, now)
+        r = run_nudges(db, project, cfg, state.settings.mode, now, getattr(state, "phraser", None))
         out.append(
             {
                 "project": cfg.name,
@@ -56,6 +56,7 @@ def run_nudge_job(request: Request, db: Session = Depends(get_db)) -> dict:
                 "deferred_outside_hours": r.deferred_outside_hours,
                 "skipped_cooldown": r.skipped_cooldown,
                 "skipped_no_recipient": r.skipped_no_recipient,
+                "phrasing": dict(r.phrasing),
             }
         )
     return {"mode": state.settings.mode.value, "projects": out}

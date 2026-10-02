@@ -9,15 +9,17 @@ from app.config import ProjectCfg
 from app.domain.rules import Finding
 
 
-def _link(f: Finding) -> str:
-    return f" {f.url}" if f.url else ""
+def _link(f: Finding, link: str | None) -> str:
+    target = link or f.url
+    return f" {target}" if f.url and target else ""
 
 
 def _days(n: int) -> str:
     return f"{n} working day" + ("" if n == 1 else "s")
 
 
-def render(f: Finding, first_name: str, cfg: ProjectCfg) -> str:
+def render(f: Finding, first_name: str, cfg: ProjectCfg, link: str | None = None) -> str:
+    """`link` replaces the issue URL, so a placeholder can be shown to the LLM instead."""
     e = f.evidence
     hi = f"Hi {first_name}, "
     if f.rule_id == "STALE_IN_PROGRESS":
@@ -28,7 +30,7 @@ def render(f: Finding, first_name: str, cfg: ProjectCfg) -> str:
             what = f"has stayed in {cfg.statuses.in_progress} for {_days(e['working_days_in_status'])}"
         return (
             f"{hi}we noticed {f.title} {what}. "
-            f"Could you add a quick note on where it stands, or tell us what is in the way?{_link(f)}"
+            f"Could you add a quick note on where it stands, or tell us what is in the way?{_link(f, link)}"
         )
     if f.rule_id == "UNASSIGNED_IN_SPRINT":
         why = (
@@ -36,11 +38,11 @@ def render(f: Finding, first_name: str, cfg: ProjectCfg) -> str:
             if e["reason"] == "no_owner"
             else f"{e['previous_owner']} is no longer an active member of the project"
         )
-        return f"{hi}{f.title} is in {e['sprint']} but {why}. Could you pick an owner for it?{_link(f)}"
+        return f"{hi}{f.title} is in {e['sprint']} but {why}. Could you pick an owner for it?{_link(f, link)}"
     if f.rule_id == "NO_ESTIMATE":
         return (
             f"{hi}{f.title} is in {e['sprint']} without an estimate. "
-            f"Could you add one so we can plan capacity properly?{_link(f)}"
+            f"Could you add one so we can plan capacity properly?{_link(f, link)}"
         )
     if f.rule_id == "OVERLOADED_MEMBER":
         facts = []
@@ -69,15 +71,15 @@ def render(f: Finding, first_name: str, cfg: ProjectCfg) -> str:
         if e["reason"] == "approved_not_merged":
             return (
                 f"{hi}the pull request {f.title} was approved {_days(e['working_days'])} ago "
-                f"and is not merged yet. Could you merge it or tell us what is holding it?{_link(f)}"
+                f"and is not merged yet. Could you merge it or tell us what is holding it?{_link(f, link)}"
             )
         return (
             f"{hi}a review of the pull request {f.title} was requested {e['hours']} hours ago. "
-            f"Could you take a look today?{_link(f)}"
+            f"Could you take a look today?{_link(f, link)}"
         )
     if f.rule_id == "BLOCKED_LABEL_AGING":
         return (
             f"{hi}{f.title} has carried the {cfg.thresholds.blocked_label} label for "
-            f"{_days(e['working_days_blocked'])}. What would unblock it, and who can help?{_link(f)}"
+            f"{_days(e['working_days_blocked'])}. What would unblock it, and who can help?{_link(f, link)}"
         )
     raise ValueError(f"no template for rule {f.rule_id}")

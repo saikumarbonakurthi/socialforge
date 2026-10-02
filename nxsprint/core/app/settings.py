@@ -3,7 +3,7 @@
 from enum import StrEnum
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,8 +29,24 @@ class Settings(BaseSettings):
     # Read in Phase 3; never hardcode a model string (section 2).
     llm_model: str | None = Field(default=None, validation_alias="NXSPRINT_MODEL")
     max_daily_usd: float | None = None
+    # No built in prices: the model is env driven, so its prices are too (USD per million tokens).
+    price_input_per_mtok: float | None = Field(default=None, gt=0)
+    price_output_per_mtok: float | None = Field(default=None, gt=0)
     github_token: str | None = None  # read-only scope for sync (rule 2)
     github_webhook_secret: str | None = None
+
+    @model_validator(mode="after")
+    def _llm_needs_budget(self) -> "Settings":
+        if self.llm_model and (
+            self.max_daily_usd is None
+            or self.price_input_per_mtok is None
+            or self.price_output_per_mtok is None
+        ):
+            raise ValueError(
+                "NXSPRINT_MODEL is set, so NXSPRINT_MAX_DAILY_USD, NXSPRINT_PRICE_INPUT_PER_MTOK and "
+                "NXSPRINT_PRICE_OUTPUT_PER_MTOK are required (no spending without a ceiling)"
+            )
+        return self
 
 
 @lru_cache

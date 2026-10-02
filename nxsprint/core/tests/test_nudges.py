@@ -198,3 +198,24 @@ def test_templates_follow_house_rules(cfg, finding):
 def test_unknown_rule_has_no_template(cfg):
     with pytest.raises(ValueError):
         render(Finding("NOPE", Severity.LOW, None, "x", "t", None, {}), "A", cfg)
+
+
+# Engine with the LLM phraser
+def test_engine_uses_phraser_and_counts_outcomes(session, cfg):
+    from app.llm.phraser import Phraser
+    from tests.test_phraser import FakeLLM, result
+
+    project = seed(session, cfg, [item(status="In Progress", updated_at=days_ago(4), labels=())])
+    good = (
+        "Hi Ravi, we noticed Login page has had no update for 4 working days. "
+        "Could you share a quick note? {link}"
+    )
+    llm = FakeLLM(result(good), TimeoutError("down"), TimeoutError("down"))
+    phr = Phraser(llm, "m-test", 5.0, 3.0, 15.0)
+    run = run_nudges(session, project, cfg, Mode.DRY_RUN, NOW, phraser=phr)
+    by_rule = {n.rule: n.message for n in run.created}
+    assert "share a quick note" in by_rule["STALE_IN_PROGRESS"]
+    assert "github.com" in by_rule["STALE_IN_PROGRESS"] and "{link}" not in by_rule["STALE_IN_PROGRESS"]
+    assert run.phrasing["llm"] == 1 and run.phrasing["template:api_error"] >= 1
+    outbox = {o.body for o in session.scalars(select(Outbox))}
+    assert by_rule["STALE_IN_PROGRESS"] in outbox  # outbox carries exactly the phrased text

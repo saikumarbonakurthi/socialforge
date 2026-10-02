@@ -2,7 +2,7 @@
 
 AI scrum master for SRIA Infotech. Reads GitHub Projects v2, detects problems with deterministic rules, nudges the right person, prepares ceremonies. Dry-run by default. Humans stay accountable.
 
-Status: **Phase 2** (sync, rule engine, nudges, outbox; dry run). No LLM or Teams delivery yet.
+Status: **Phase 3** (sync, rules, nudges, outbox, Claude wording; dry run). No Teams delivery yet.
 
 ## Layout
 `core/` FastAPI service (`app/{api,domain,integrations,llm,jobs}`, `alembic/`, `tests/`), `n8n/workflows/`, `config/`, `docs/`.
@@ -20,6 +20,8 @@ Sync: `POST /jobs/sync` (bearer secret) pulls every configured project from GitH
 
 Nudges: `POST /jobs/nudges` runs the 7 rules, applies cooldowns, working hours (in each member's timezone), weekends and holidays, and queues one nudge plus one `outbox` row per finding. Nothing is delivered anywhere yet; read the result at `GET /outbox` and `GET /nudges`. `POST /nudges/{id}/ack` acknowledges, `GET /projects/{id}/risk` shows current findings without creating nudges.
 Findings with no owner (unassigned item, sprint at risk) go to the project lead. `PR_WAITING_REVIEW` is implemented and tested but dormant: the sync does not fetch PR review data yet.
+
+Wording (Phase 3): rules decide who and why; Claude only phrases. Off by default. Set `NXSPRINT_MODEL`, `NXSPRINT_MAX_DAILY_USD` and both `NXSPRINT_PRICE_*` variables to turn it on (startup refuses a model without a ceiling and prices). Each message is checked (greeting, length, no dashes, no invented numbers, links or mentions, title kept, link placeholder used once); one retry, then the deterministic template is sent instead. Only issue titles, status names, counts and first names are sent to the model, never logins or links (the real link is substituted after validation). Every call is logged to `llm_call` with tokens and an estimated cost; when the day's ceiling is hit, templates are used and the owner gets one alert in the outbox. Prompt: `core/app/llm/prompts/nudge_v1.md`. Golden set: `core/tests/golden/` (offline), and `NXSPRINT_LIVE_LLM=1 pytest tests/golden/test_live.py -s` runs it against the real model (costs money).
 
 Dev without Docker (Python 3.12): `make install && make migrate && make test && make lint`.
 

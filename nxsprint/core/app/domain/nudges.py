@@ -1,5 +1,6 @@
 """Nudge engine: findings in, nudges and outbox rows out. Never sends anything itself."""
 
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
@@ -12,6 +13,7 @@ from app.domain.calendar import can_message_now
 from app.domain.messages import render
 from app.domain.rules import Finding, run_rules
 from app.domain.sync import utc
+from app.llm.phraser import Phraser
 from app.models import Member, Nudge, Outbox, Project
 from app.settings import Mode
 
@@ -25,6 +27,7 @@ class NudgeRun:
     deferred_outside_hours: int = 0
     skipped_cooldown: int = 0
     skipped_no_recipient: int = 0
+    phrasing: Counter = field(default_factory=Counter)  # llm, or template:<reason>
 
 
 def recipient(f: Finding, cfg: ProjectCfg) -> MemberCfg | None:
@@ -55,7 +58,14 @@ def _in_cooldown(session: Session, project: Project, f: Finding, cfg: ProjectCfg
     return last is not None and utc(last.created_at) > now - timedelta(hours=cfg.cooldowns.hours[f.rule_id])
 
 
-def run_nudges(session: Session, project: Project, cfg: ProjectCfg, mode: Mode, now: datetime) -> NudgeRun:
+def run_nudges(
+    session: Session,
+    project: Project,
+    cfg: ProjectCfg,
+    mode: Mode,
+    now: datetime,
+    phraser: Phraser | None = None,
+) -> NudgeRun:
     run = NudgeRun()
     findings = run_rules(load_board(session, project, cfg, now))
     run.findings = len(findings)
@@ -72,7 +82,18 @@ def run_nudges(session: Session, project: Project, cfg: ProjectCfg, mode: Mode, 
         if _in_cooldown(session, project, f, cfg, now):
             run.skipped_cooldown += 1
             continue
-        body = render(f, target.name.split()[0], cfg)
+        first = target.name.split()[0]
+        if phraser is None:
+            body = render(f, first, cfg)
+            run.phrasing["template:disabled"] += 1
+        else:
+            phrased = phraser.phrase(
+                session, project_id=project.id, cfg=cfg, mode=mode, finding=f, first_name=first, now=now
+            )
+            body = phrased.message
+            run.phrasing[
+                "llm" if phrased.source == "llm" else f"template:{phrased.reason.split(':')[0]}"
+            ] += 1
         nudge = Nudge(
             project_id=project.id,
             member_id=members[target.github_login].id,
