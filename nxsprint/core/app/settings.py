@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     bot_app_id: str | None = None
     bot_app_password: str | None = None
     bot_tenant_id: str | None = None
+    # WhatsApp escalation (Phase 7). Off unless explicitly enabled, and then everything below is required.
+    whatsapp_enabled: bool = False
+    whatsapp_token: str | None = None
+    whatsapp_phone_number_id: str | None = None
+    whatsapp_api_version: str | None = None  # e.g. v21.0, set it, Meta retires old versions
     github_token: str | None = None  # read-only scope for sync (rule 2)
     github_webhook_secret: str | None = None
 
@@ -51,6 +56,16 @@ class Settings(BaseSettings):
             raise ValueError(
                 "NXSPRINT_MODEL is set, so NXSPRINT_MAX_DAILY_USD, NXSPRINT_PRICE_INPUT_PER_MTOK and "
                 "NXSPRINT_PRICE_OUTPUT_PER_MTOK are required (no spending without a ceiling)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _whatsapp_needs_credentials(self) -> "Settings":
+        needed = (self.whatsapp_token, self.whatsapp_phone_number_id, self.whatsapp_api_version)
+        if self.whatsapp_enabled and not all(needed):
+            raise ValueError(
+                "NXSPRINT_WHATSAPP_ENABLED needs NXSPRINT_WHATSAPP_TOKEN, NXSPRINT_WHATSAPP_PHONE_NUMBER_ID "
+                "and NXSPRINT_WHATSAPP_API_VERSION"
             )
         return self
 

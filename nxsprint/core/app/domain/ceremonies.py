@@ -350,7 +350,7 @@ def render_retro(r: Retro, cfg: ProjectCfg) -> str:
 
 # Weekly owner report -------------------------------------------------------------------------------------
 _SEV = {Severity.CRITICAL: 3, Severity.HIGH: 2, Severity.MEDIUM: 1, Severity.LOW: 0}
-_RULE_ORDER = ("SPRINT_AT_RISK", "BLOCKED_LABEL_AGING", "OVERLOADED_MEMBER", "UNASSIGNED_IN_SPRINT",
+_RULE_ORDER = ("PRODUCTION_BLOCKER_UNOWNED", "GOAL_ITEM_NOT_STARTED", "SPRINT_AT_RISK", "BLOCKED_LABEL_AGING", "OVERLOADED_MEMBER", "UNASSIGNED_IN_SPRINT",
                "STALE_IN_PROGRESS", "PR_WAITING_REVIEW", "NO_ESTIMATE")  # fmt: skip
 
 
@@ -366,6 +366,10 @@ def describe(f, cfg: ProjectCfg) -> str:
         "STALE_IN_PROGRESS": f"{f.title} has had no update for {_days(e.get('working_days_since_update', 0))}",
         "PR_WAITING_REVIEW": f"The pull request {f.title} is waiting",
         "NO_ESTIMATE": f"{f.title} has no estimate",
+        "GOAL_ITEM_NOT_STARTED": f"The goal item {f.title} has not started",
+        "PRODUCTION_BLOCKER_UNOWNED": (
+            f"The production blocker {f.title} has had no owner for {e.get('working_hours_unowned', 0):g} working hours"
+        ),
     }[f.rule_id]
 
 
@@ -380,6 +384,10 @@ def decisions(findings, cfg: ProjectCfg) -> list[str]:
     for f in findings:
         if f.rule_id == "UNASSIGNED_IN_SPRINT":
             out.append(f"Pick an owner for {f.title}.")
+        elif f.rule_id == "PRODUCTION_BLOCKER_UNOWNED":
+            out.append(f"Pick an owner for {f.title}, a production blocker.")
+        elif f.rule_id == "GOAL_ITEM_NOT_STARTED":
+            out.append(f"Decide how to protect the sprint goal, {f.title} has not started.")
         elif f.rule_id == "SPRINT_AT_RISK":
             out.append(f"Decide what to cut or move so {f.title} can finish.")
         elif f.rule_id == "OVERLOADED_MEMBER":

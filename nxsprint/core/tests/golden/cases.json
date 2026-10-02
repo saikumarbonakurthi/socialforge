@@ -186,5 +186,72 @@
     ]
    }
   ]
+ },
+ {
+  "id": "goal_item",
+  "first_name": "Ravi",
+  "finding": {
+   "rule_id": "GOAL_ITEM_NOT_STARTED",
+   "severity": "critical",
+   "member": "ravi-demo",
+   "issue_node_id": "I_7",
+   "title": "Rate limit login",
+   "url": "https://github.com/sria-demo/demo-app/issues/7",
+   "evidence": {
+    "sprint": "Sprint 12",
+    "status": "Todo",
+    "working_days_left": 1
+   }
+  },
+  "good": [
+   "Hi Ravi, Rate limit login is a goal item for Sprint 12 and it has not started, with 1 working day left in the sprint. Can you start it, or tell us what is stopping you? {link}"
+  ],
+  "bad": [
+   {
+    "text": "Hi Ravi, Rate limit login is a goal item for Sprint 12 and has not started, with 3 working days left. Can you start it? {link}",
+    "expect": [
+     "invented_number"
+    ]
+   },
+   {
+    "text": "Hi Ravi, Rate limit login is a goal item for Sprint 12 and has not started. This is critical, drop everything now and call Asha at 9876543210. {link}",
+    "expect": [
+     "invented_number"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "prod_blocker",
+  "first_name": "Asha",
+  "finding": {
+   "rule_id": "PRODUCTION_BLOCKER_UNOWNED",
+   "severity": "critical",
+   "member": null,
+   "issue_node_id": "I_8",
+   "title": "Checkout outage",
+   "url": "https://github.com/sria-demo/demo-app/issues/8",
+   "evidence": {
+    "working_hours_unowned": 4.5
+   }
+  },
+  "good": [
+   "Hi Asha, Checkout outage is a production blocker and it has had no owner for 4.5 working hours. Who can take it now? {link}"
+  ],
+  "bad": [
+   {
+    "text": "Hi Asha, Checkout outage is a production blocker with no owner for 6 working hours. Who can take it now? {link}",
+    "expect": [
+     "invented_number"
+    ]
+   },
+   {
+    "text": "Hi Asha, Checkout outage is a production blocker with no owner for 4.5 working hours. Who can take it now? https://status.example.com",
+    "expect": [
+     "invented_link_or_mention",
+     "link"
+    ]
+   }
+  ]
  }
 ]

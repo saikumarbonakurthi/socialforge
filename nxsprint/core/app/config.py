@@ -4,6 +4,7 @@ Everything that can message a human is required with no default (section 17).
 Validation failure raises at startup.
 """
 
+import re
 from datetime import date, time
 from enum import StrEnum
 from pathlib import Path
@@ -22,6 +23,8 @@ RULE_IDS = (
     "SPRINT_AT_RISK",
     "PR_WAITING_REVIEW",
     "BLOCKED_LABEL_AGING",
+    "GOAL_ITEM_NOT_STARTED",
+    "PRODUCTION_BLOCKER_UNOWNED",
 )
 
 
@@ -68,13 +71,20 @@ class MemberCfg(_Strict):
     name: str
     github_login: str
     teams_user_id: str
-    whatsapp_number: str | None = None
+    whatsapp_number: str | None = None  # international format, e.g. +919876543210
     role: Role
     timezone: str
     capacity_points: float = Field(gt=0)
     active: bool = True
 
     _tz = field_validator("timezone")(_check_tz)
+
+    @field_validator("whatsapp_number")
+    @classmethod
+    def _e164(cls, v: str | None) -> str | None:
+        if v is not None and not re.fullmatch(r"\+[1-9]\d{7,14}", v):
+            raise ValueError("whatsapp_number must look like +919876543210")
+        return v
 
 
 class Window(_Strict):
@@ -114,8 +124,35 @@ class Thresholds(_Strict):
 
 
 class Escalation(_Strict):
+    """Hours since the nudge with no ack before each step up the ladder."""
+
     ack_hours_before_channel: int = Field(gt=0)
     ack_hours_before_lead: int = Field(gt=0)
+    ack_hours_before_whatsapp: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _ordered(self) -> "Escalation":
+        if not self.ack_hours_before_channel < self.ack_hours_before_lead < self.ack_hours_before_whatsapp:
+            raise ValueError("escalation hours must increase: channel, then lead, then whatsapp")
+        return self
+
+
+class Critical(_Strict):
+    """What counts as critical, the only severity that may reach WhatsApp. Nothing here has a default."""
+
+    goal_label: str
+    production_blocker_label: str
+    not_started_statuses: list[str] = Field(min_length=1)
+    sprint_end_within_working_days: int = Field(ge=0)
+    unowned_production_blocker_working_hours: float = Field(gt=0)
+
+
+class WhatsApp(_Strict):
+    """Only needed when the WhatsApp feature flag is on. Template must be approved in Meta first."""
+
+    template_name: str
+    language: str
+    max_per_person_per_day: int = Field(gt=0)
 
 
 class Ceremonies(_Strict):
@@ -154,6 +191,8 @@ class ProjectCfg(_Strict):
     cooldowns: Cooldowns
     thresholds: Thresholds
     escalation: Escalation
+    critical: Critical
+    whatsapp: WhatsApp | None = None
     channels: ChannelRouting
 
     _tz = field_validator("timezone")(_check_tz)
@@ -169,6 +208,12 @@ class ProjectCfg(_Strict):
     def _summary_after_prompt(self) -> "ProjectCfg":
         if self.standup_summary_time <= self.standup_time:
             raise ValueError("standup_summary_time must be later than standup_time")
+        return self
+
+    @model_validator(mode="after")
+    def _working_hours_do_not_wrap(self) -> "ProjectCfg":
+        if self.working_hours.start >= self.working_hours.end:
+            raise ValueError("working_hours.start must be before working_hours.end")
         return self
 
     @model_validator(mode="after")

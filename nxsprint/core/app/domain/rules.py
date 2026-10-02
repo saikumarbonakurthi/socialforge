@@ -6,12 +6,16 @@ Each finding carries evidence built only from stored data, so wording can stay g
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from enum import StrEnum
 from zoneinfo import ZoneInfo
 
 from app.config import ProjectCfg
-from app.domain.calendar import working_days_between, working_days_in_range
+from app.domain.calendar import (
+    working_days_between,
+    working_days_in_range,
+    working_hours_between,
+)
 
 
 class Severity(StrEnum):
@@ -35,6 +39,7 @@ class ItemView:
     status_since: datetime  # lower bound: first time we saw the current status
     blocked_since: datetime | None  # first time we saw the blocked label, if present now
     priority: str | None = None
+    unowned_since: datetime | None = None  # first time we saw it with no assignee, if unowned now
 
 
 @dataclass(frozen=True)
@@ -286,6 +291,58 @@ def blocked_label_aging(state: BoardState) -> list[Finding]:
     return out
 
 
+def goal_item_not_started(state: BoardState) -> list[Finding]:
+    """CRITICAL: the sprint is about to end and an item carrying the goal label has not been started."""
+    sp, cfg = state.sprint, state.cfg
+    if sp is None:
+        return []
+    c = cfg.critical
+    today = state.now.astimezone(ZoneInfo(cfg.timezone)).date()
+    left = working_days_in_range(today + timedelta(days=1), sp.end, cfg)
+    if left > c.sprint_end_within_working_days:
+        return []
+    return [
+        Finding(
+            "GOAL_ITEM_NOT_STARTED",
+            Severity.CRITICAL,
+            i.assignee_login,
+            i.issue_node_id,
+            i.title,
+            i.url,
+            {"sprint": sp.name, "status": i.status, "working_days_left": left},
+        )
+        for i in state.items
+        if i.sprint_name == sp.name and c.goal_label in i.labels and i.status in c.not_started_statuses
+    ]
+
+
+def production_blocker_unowned(state: BoardState) -> list[Finding]:
+    """CRITICAL: an item with the production blocker label has had no owner for too many working hours."""
+    cfg, out = state.cfg, []
+    c = cfg.critical
+    for i in state.items:
+        if (
+            i.status == cfg.statuses.done
+            or c.production_blocker_label not in i.labels
+            or i.unowned_since is None
+        ):
+            continue
+        hours = working_hours_between(i.unowned_since, state.now, cfg)
+        if hours >= c.unowned_production_blocker_working_hours:
+            out.append(
+                Finding(
+                    "PRODUCTION_BLOCKER_UNOWNED",
+                    Severity.CRITICAL,
+                    None,
+                    i.issue_node_id,
+                    i.title,
+                    i.url,
+                    {"working_hours_unowned": round(hours, 1)},
+                )
+            )
+    return out
+
+
 ALL_RULES: tuple[Callable[[BoardState], list[Finding]], ...] = (
     stale_in_progress,
     unassigned_in_sprint,
@@ -294,6 +351,8 @@ ALL_RULES: tuple[Callable[[BoardState], list[Finding]], ...] = (
     sprint_at_risk,
     pr_waiting_review,
     blocked_label_aging,
+    goal_item_not_started,
+    production_blocker_unowned,
 )
 
 

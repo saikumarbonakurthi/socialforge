@@ -51,6 +51,11 @@ def load_board(session: Session, project: Project, cfg: ProjectCfg, now: datetim
                 url=cur.url,
                 status=cur.status,
                 priority=cur.priority,
+                unowned_since=(
+                    _run_start(rows, lambda r: r.assignee_login is None)
+                    if cur.assignee_login is None
+                    else None
+                ),
                 assignee_login=cur.assignee_login,
                 estimate=cur.estimate,
                 sprint_name=sprints[cur.sprint_id].name if cur.sprint_id else None,

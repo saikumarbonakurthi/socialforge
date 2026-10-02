@@ -82,4 +82,15 @@ def render(f: Finding, first_name: str, cfg: ProjectCfg, link: str | None = None
             f"{hi}{f.title} has carried the {cfg.thresholds.blocked_label} label for "
             f"{_days(e['working_days_blocked'])}. What would unblock it, and who can help?{_link(f, link)}"
         )
+    if f.rule_id == "GOAL_ITEM_NOT_STARTED":
+        return (
+            f"{hi}{f.title} is a goal item for {e['sprint']} and it has not started, with "
+            f"{_days(e['working_days_left'])} left in the sprint. "
+            f"Can you start it, or tell us what is stopping you?{_link(f, link)}"
+        )
+    if f.rule_id == "PRODUCTION_BLOCKER_UNOWNED":
+        return (
+            f"{hi}{f.title} is a production blocker and it has had no owner for {e['working_hours_unowned']:g} "
+            f"working hours. Who can take it now?{_link(f, link)}"
+        )
     raise ValueError(f"no template for rule {f.rule_id}")

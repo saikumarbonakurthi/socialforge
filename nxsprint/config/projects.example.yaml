@@ -29,7 +29,7 @@ projects:
     cooldowns:
       hours: {STALE_IN_PROGRESS: 24, UNASSIGNED_IN_SPRINT: 24, NO_ESTIMATE: 24,
               OVERLOADED_MEMBER: 48, SPRINT_AT_RISK: 24, PR_WAITING_REVIEW: 24,
-              BLOCKED_LABEL_AGING: 24}
+              BLOCKED_LABEL_AGING: 24, GOAL_ITEM_NOT_STARTED: 12, PRODUCTION_BLOCKER_UNOWNED: 12}
     thresholds:
       stale_no_activity_working_days: 2
       stale_status_unchanged_working_days: 3
@@ -40,7 +40,15 @@ projects:
       sprint_risk_no_done_working_days: 3
       sprint_risk_gap_pct: 25
       blocked_label: blocked
-    escalation: {ack_hours_before_channel: 4, ack_hours_before_lead: 8}
+    escalation: {ack_hours_before_channel: 4, ack_hours_before_lead: 8, ack_hours_before_whatsapp: 12}
+    critical:
+      goal_label: goal
+      production_blocker_label: production
+      not_started_statuses: [Todo]
+      sprint_end_within_working_days: 1
+      unowned_production_blocker_working_hours: 4
+    # Needed only if NXSPRINT_WHATSAPP_ENABLED=true. Remove this block to keep WhatsApp impossible.
+    whatsapp: {template_name: nxsprint_critical, language: en, max_per_person_per_day: 2}
     channels:
       team_webhook_env: TEAMS_WEBHOOK_DEMO_TEAM
       dm_webhook_env: TEAMS_WEBHOOK_DEMO_DM

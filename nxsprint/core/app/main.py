@@ -10,7 +10,9 @@ from app.api import ceremonies, health, jobs, nudges, teams, webhooks
 from app.config import load_config
 from app.db import make_engine, make_session_factory
 from app.domain.delivery import check_live_ready
+from app.domain.escalation import check_whatsapp_ready
 from app.integrations.teams_bot import BotClient, default_key_resolver
+from app.integrations.whatsapp import WhatsAppClient
 from app.llm.client import AnthropicLLM
 from app.llm.phraser import Phraser
 from app.logging import configure_logging, request_id_var
@@ -29,6 +31,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.config = load_config(cfg_settings.config_path, cfg_settings.mode)
         if cfg_settings.mode is Mode.LIVE:
             check_live_ready(app.state.config, os.environ)  # fail loudly before anything can be sent
+        if cfg_settings.whatsapp_enabled:
+            check_whatsapp_ready(app.state.config)  # fail loudly: no half configured WhatsApp
+            app.state.whatsapp = WhatsAppClient(
+                cfg_settings.whatsapp_token,
+                cfg_settings.whatsapp_phone_number_id,
+                cfg_settings.whatsapp_api_version,
+            )
         # Teams bot (two way). Off unless the Azure registration is configured.
         if cfg_settings.bot_enabled:
             app.state.bot = BotClient(

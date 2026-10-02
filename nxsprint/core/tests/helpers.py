@@ -27,3 +27,8 @@ def item(**kw) -> WorkItem:
     )
     base.update(kw)
     return WorkItem(**base)
+
+
+def ist(month: int, day: int, hour: int, minute: int = 0) -> datetime:
+    """A 2026 wall clock time in Asia/Kolkata (UTC+5:30), as an aware UTC datetime."""
+    return datetime(2026, month, day, hour, minute, tzinfo=UTC) - timedelta(hours=5, minutes=30)

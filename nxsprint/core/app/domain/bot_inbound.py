@@ -62,7 +62,9 @@ def remember_conversation(session: Session, member: Member, activity: dict, now:
 
 
 def _ack(session: Session, member: Member, number: int | None, now: datetime) -> str:
-    query = select(Nudge).where(Nudge.member_id == member.id, Nudge.status.in_(("queued", "sent")))
+    query = select(Nudge).where(
+        Nudge.member_id == member.id, Nudge.status.in_(("queued", "sent", "escalated"))
+    )
     if number is not None:
         query = query.where(Nudge.id == number)
     nudges = session.scalars(query).all()

@@ -1,3 +1,4 @@
+import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -9,7 +10,7 @@ from app.api.deps import configured_projects as _projects
 from app.api.deps import get_db, require_auth
 from app.api.deps import use_bot as _use_bot
 from app.domain.bot_inbound import handle_activity
-from app.domain.delivery import lease_bot_rows, mark_failed, mark_sent
+from app.domain.delivery import lease_bot_rows, lease_whatsapp_rows, mark_failed, mark_sent
 from app.domain.standup import post_standup_summary, run_standup_prompts
 from app.integrations.teams_bot import BotAuthError, verify_activity
 from app.models import Member, Outbox, TeamsConversation
@@ -113,3 +114,25 @@ def deliver_bot_job(request: Request, db: Session = Depends(get_db)) -> dict:
             mark_sent(db, row.id, _now(request))
             sent += 1
     return {"mode": state.settings.mode.value, "sent": sent, "failed": failed}
+
+
+@jobs_router.post("/deliver_whatsapp")
+def deliver_whatsapp_job(request: Request, db: Session = Depends(get_db)) -> dict:
+    """Send leased live WhatsApp rows. A no-op unless the feature flag is on and the app is live."""
+    state = request.app.state
+    if not state.settings.whatsapp_enabled:
+        return {"enabled": False, "sent": 0, "failed": 0}
+    sent = failed = 0
+    for row in lease_whatsapp_rows(db, state.settings.mode, _now(request), 10):
+        try:
+            payload = json.loads(row.body)
+            state.whatsapp.send_template(
+                row.target, payload["template"], payload["language"], payload["params"]
+            )
+        except Exception as exc:  # the error text never contains the number, see WhatsAppClient
+            mark_failed(db, row.id, f"{type(exc).__name__}: {str(exc)[:200]}")
+            failed += 1
+        else:
+            mark_sent(db, row.id, _now(request))
+            sent += 1
+    return {"enabled": True, "mode": state.settings.mode.value, "sent": sent, "failed": failed}

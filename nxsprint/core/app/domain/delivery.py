@@ -102,13 +102,21 @@ def lease_pending(
     return items
 
 
-def lease_bot_rows(session: Session, mode: Mode, now: datetime, limit: int) -> list[Outbox]:
-    """Live rows that the bot (not n8n) must send. Same lease and retry rules as webhook rows."""
+def _lease_core_sent(session: Session, channel: str, mode: Mode, now: datetime, limit: int) -> list[Outbox]:
     if mode is not Mode.LIVE:
         return []
-    rows = _lease_rows(session, frozenset({BOT_CHANNEL}), now, limit)
+    rows = _lease_rows(session, frozenset({channel}), now, limit)
     session.commit()
     return rows
+
+
+def lease_bot_rows(session: Session, mode: Mode, now: datetime, limit: int) -> list[Outbox]:
+    """Live rows that the bot (not n8n) must send. Same lease and retry rules as webhook rows."""
+    return _lease_core_sent(session, BOT_CHANNEL, mode, now, limit)
+
+
+def lease_whatsapp_rows(session: Session, mode: Mode, now: datetime, limit: int) -> list[Outbox]:
+    return _lease_core_sent(session, "whatsapp", mode, now, limit)
 
 
 class DeliveryError(ValueError):

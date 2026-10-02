@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import clock, configured_projects, get_db, require_auth, use_bot
 from app.domain import ceremonies as c
 from app.domain.board import load_board
+from app.domain.escalation import run_escalations
 from app.models import Project
 
 jobs_router = APIRouter(prefix="/jobs", dependencies=[Depends(require_auth)])
@@ -65,3 +66,26 @@ def view_retro(project_id: int, request: Request, db: Session = Depends(get_db))
 def view_weekly(project_id: int, request: Request, db: Session = Depends(get_db)) -> dict:
     project, cfg = _for_view(request, db, project_id)
     return {"text": c.build_weekly(db, project, cfg, clock(request))}
+
+
+@jobs_router.post("/escalations")
+def escalations_job(request: Request, db: Session = Depends(get_db)) -> dict:
+    """Step unacknowledged nudges up the ladder. Messages go to the outbox like everything else."""
+    state = request.app.state
+    out = []
+    for cfg, project in configured_projects(request, db):
+        if project is None:
+            out.append({"project": cfg.name, "error": "not synced yet, run /jobs/sync first"})
+            continue
+        r = run_escalations(
+            db, project, cfg, state.settings.mode, clock(request),
+            use_bot=use_bot(request),
+            whatsapp_enabled=state.settings.whatsapp_enabled,
+            redirect_active=bool(state.settings.delivery_redirect_target),
+        )  # fmt: skip
+        out.append({"project": cfg.name, **r.__dict__})
+    return {
+        "mode": state.settings.mode.value,
+        "whatsapp_enabled": state.settings.whatsapp_enabled,
+        "projects": out,
+    }

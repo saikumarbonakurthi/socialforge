@@ -74,7 +74,9 @@ def get_outbox(request: Request, limit: int = 100, db: Session = Depends(get_db)
         {
             "id": o.id,
             "channel": o.channel,
-            "target": o.target,
+            "target": ("..." + o.target[-4:])
+            if o.channel == "whatsapp"
+            else o.target,  # never show a full number
             "body": o.body,
             "mode": o.mode,
             "status": status_of(o, now),

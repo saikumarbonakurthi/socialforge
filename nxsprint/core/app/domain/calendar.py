@@ -39,3 +39,20 @@ def can_message_now(now: datetime, member_tz: str, cfg: ProjectCfg) -> bool:
         and _in_window(local.time(), cfg.working_hours)
         and not _in_window(local.time(), cfg.quiet_hours)
     )
+
+
+def working_hours_between(start: datetime, end: datetime, cfg: ProjectCfg) -> float:
+    """Hours of working time (working days, inside working hours) between two moments, project timezone."""
+    tz = ZoneInfo(cfg.timezone)
+    a, b = start.astimezone(tz), end.astimezone(tz)
+    if b <= a:
+        return 0.0
+    total, day = 0.0, a.date()
+    while day <= b.date():
+        if is_working_day(day, cfg):
+            lo = max(datetime.combine(day, cfg.working_hours.start, tz), a)
+            hi = min(datetime.combine(day, cfg.working_hours.end, tz), b)
+            if hi > lo:
+                total += (hi - lo).total_seconds() / 3600
+        day += timedelta(days=1)
+    return total

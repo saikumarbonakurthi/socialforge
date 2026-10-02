@@ -2,7 +2,7 @@
 
 AI scrum master for SRIA Infotech. Reads GitHub Projects v2, detects problems with deterministic rules, nudges the right person, prepares ceremonies. Dry-run by default. Humans stay accountable.
 
-Status: **Phase 6** (sync, rules, nudges, Claude wording, n8n, Teams two way, standup, planning and retro prep, weekly owner report; dry run by default). No WhatsApp escalation or hardening yet.
+Status: **Phase 7** (everything up to the escalation ladder with feature flagged WhatsApp for critical items; dry run by default). Hardening and runbook (Phase 8) not done yet.
 
 ## Layout
 `core/` FastAPI service (`app/{api,domain,integrations,llm,jobs}`, `alembic/`, `tests/`), `n8n/workflows/`, `config/`, `docs/`.
@@ -28,6 +28,8 @@ Delivery (Phase 4): in `dry_run` nothing is ever sent. In `live`, the `deliver-o
 Teams two way (Phase 5): with the Azure bot configured (`docs/teams-setup.md`), people reply `ack` to nudges and answer a daily standup prompt (Done, Doing, Blocked); one deterministic team summary is posted at `standup_summary_time`. The bot is used only for people who have messaged it, everyone else is reached through the webhook. Inbound requests are verified against Microsoft's signature, audience, issuer and service URL.
 
 Ceremonies (Phase 6): planning proposal and retro prep go to the project lead, a weekly report goes to the owner. Proposals only, nothing on the board is changed. Timing and priority order are required config (`priority_order`, `ceremonies`). See `docs/ceremonies.md`; `make demo` prints all three.
+
+Escalation (Phase 7): unacknowledged nudges climb a ladder (team channel, then the lead by Teams DM, then for critical items only a WhatsApp template to the lead). WhatsApp is off by default behind `NXSPRINT_WHATSAPP_ENABLED`, capped per person per day, and impossible while a test redirect is active. What counts as critical is required config (`critical`). See `docs/escalation.md`.
 
 Dev without Docker (Python 3.12): `make install && make migrate && make test && make lint`.
 

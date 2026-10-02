@@ -17,6 +17,7 @@ EXPECTED_SCHEDULE = {
     "cron-standup": ("cronExpression", "*/15 * * * 1-5"),
     "cron-weekly-report": ("cronExpression", "*/30 * * * 1-5"),
     "cron-ceremonies": ("cronExpression", "*/30 * * * 1-5"),
+    "escalation-whatsapp": ("minutes", 1),
 }
 
 

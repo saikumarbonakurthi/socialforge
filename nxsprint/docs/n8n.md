@@ -5,14 +5,15 @@ n8n is only the scheduler and the courier. All logic and all state live in core.
 | Workflow | Runs | Calls |
 |---|---|---|
 | `cron-sync` | every 15 minutes | `POST /jobs/sync` |
-| `cron-nudges` | every hour | `POST /jobs/nudges` (core skips quiet hours, weekends and holidays per member) |
+| `cron-nudges` | every hour | `POST /jobs/nudges`, then `POST /jobs/escalations` (core skips quiet hours, weekends and holidays per member) |
 | `deliver-outbox` | every minute | `GET /outbox/pending`, posts each item, then `POST /outbox/{id}/sent` or `/failed` |
 | `cron-standup` | every 15 minutes on weekdays | `POST /jobs/standup`, then `POST /jobs/standup_summary`. Core decides what is due, so extra knocks do nothing |
 | `cron-ceremonies` | every 30 minutes on weekdays | `POST /jobs/planning_prep`, then `POST /jobs/retro_prep` (core decides what is due, once per sprint) |
 | `cron-weekly-report` | every 30 minutes on weekdays | `POST /jobs/weekly_report` (core sends on the configured weekday and time, once a week) |
+| `escalation-whatsapp` | every minute | `POST /jobs/deliver_whatsapp`. A no-op unless `NXSPRINT_WHATSAPP_ENABLED=true` and the app is live. Core sends the template itself, the token never leaves core |
 | `deliver-bot` | every minute | `POST /jobs/deliver_bot`. Core sends live bot DMs itself because the bot token never leaves core |
 
-Not built yet: `escalation-whatsapp` (Phase 7).
+All workflows from the spec exist now.
 
 ## Credentials
 None are stored in n8n. The workflows read two environment variables, set by `docker-compose.yml`:
