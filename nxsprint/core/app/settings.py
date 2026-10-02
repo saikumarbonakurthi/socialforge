@@ -13,7 +13,14 @@ class Mode(StrEnum):
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="NXSPRINT_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="NXSPRINT_",
+        # `make` targets run from core/ but `make env` writes .env one level up.
+        env_file=(".env", "../.env"),
+        # .env.example leaves optional values blank; blank must mean unset, not "".
+        env_ignore_empty=True,
+        extra="ignore",
+    )
 
     mode: Mode = Mode.DRY_RUN  # rule 1: dry-run by default
     api_secret: str = Field(min_length=16)  # shared bearer secret, no default on purpose
