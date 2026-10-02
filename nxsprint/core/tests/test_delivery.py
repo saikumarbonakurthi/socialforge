@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import UTC, timedelta
 
 import pytest
 import yaml
@@ -98,27 +98,41 @@ def test_sent_marks_delivery_and_nudge_and_stops_redelivery(live):
     assert statuses[items[0]["id"]] == "delivered"
 
 
-def test_failed_releases_the_row_for_retry_and_records_why(live):
+def test_failed_row_backs_off_then_is_retried_and_the_reason_is_recorded(live):
     app, c, _ = live
     item_id = pending(c)["items"][0]["id"]
     assert (
         c.post(f"/outbox/{item_id}/failed", json={"error": "HTTP 500 from Teams"}, headers=AUTH).status_code
         == 200
     )
-    again = pending(c)["items"]
-    assert item_id in {i["id"] for i in again}  # no need to wait for the lease
+    assert item_id not in {i["id"] for i in pending(c)["items"]}  # not straight away
     row = next(r for r in c.get("/outbox", headers=AUTH).json() if r["id"] == item_id)
-    assert row["last_error"] == "HTTP 500 from Teams" and row["attempts"] == 2
+    assert (row["status"], row["last_error"], row["attempts"]) == ("retrying", "HTTP 500 from Teams", 1)
+    app.state.clock = lambda: NOW + timedelta(minutes=1, seconds=1)  # first backoff step is one minute
+    assert item_id in {i["id"] for i in pending(c)["items"]}
+    row = next(r for r in c.get("/outbox", headers=AUTH).json() if r["id"] == item_id)
+    assert row["attempts"] == 2
 
 
-def test_row_goes_dead_after_max_attempts(live):
+def test_backoff_grows_and_the_row_goes_dead_after_max_attempts(live):
     app, c, _ = live
-    item_id = None
+    waits = []
+    clock = NOW
     for _ in range(MAX_ATTEMPTS):
-        items = pending(c)["items"]
-        item_id = items[0]["id"]
+        app.state.clock = lambda clock=clock: clock
+        item_id = pending(c)["items"][0]["id"]
         c.post(f"/outbox/{item_id}/failed", json={"error": "down"}, headers=AUTH)
-    assert pending(c)["items"] == [] or item_id not in {i["id"] for i in pending(c)["items"]}
+        with app.state.session_factory() as db:
+            row = db.get(Outbox, item_id)
+            waits.append(
+                None
+                if row.next_attempt_at is None
+                else (row.next_attempt_at.replace(tzinfo=UTC) - clock).seconds // 60
+            )
+        clock = clock + timedelta(hours=2)
+    assert waits == [1, 5, 15, 60, None]  # the fifth failure schedules nothing
+    app.state.clock = lambda: clock + timedelta(days=2)
+    assert item_id not in {i["id"] for i in pending(c)["items"]}  # never offered again
     rows = {r["id"]: r for r in c.get("/outbox", headers=AUTH).json()}
     assert rows[item_id]["status"] == "dead" and rows[item_id]["attempts"] == MAX_ATTEMPTS
 

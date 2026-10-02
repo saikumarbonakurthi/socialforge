@@ -2,11 +2,12 @@ import logging
 import os
 import time
 import uuid
+from collections import Counter
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 
-from app.api import ceremonies, health, jobs, nudges, teams, webhooks
+from app.api import ceremonies, health, jobs, nudges, ops, teams, webhooks
 from app.config import load_config
 from app.db import make_engine, make_session_factory
 from app.domain.delivery import check_live_ready
@@ -64,6 +65,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         engine.dispose()
 
     app = FastAPI(title="NxSprint core", lifespan=lifespan)
+    app.state.http_counts = Counter()
 
     @app.middleware("http")
     async def request_context(request: Request, call_next):
@@ -72,6 +74,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         start = time.perf_counter()
         response = await call_next(request)
         response.headers["x-request-id"] = rid
+        app.state.http_counts[f"{response.status_code // 100}xx"] += 1
         log.info(
             "%s %s %d %dms",
             request.method,
@@ -82,6 +85,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return response
 
     app.include_router(health.router)
+    app.include_router(ops.router)
     app.include_router(jobs.router)
     app.include_router(nudges.router)
     app.include_router(webhooks.router)

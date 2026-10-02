@@ -13,7 +13,10 @@ from app.domain.sync import utc
 from app.models import Nudge, Outbox, Project
 from app.settings import Mode
 
-MAX_ATTEMPTS = 5  # then the row is dead until someone looks at it (dead letter, Phase 8)
+MAX_ATTEMPTS = 5  # then the row is dead until someone retries or dismisses it (see deadletters.py)
+# Wait before the next attempt, by how many attempts have failed so far. Rides out a short outage
+# without spending every attempt in the first few minutes.
+BACKOFF_MINUTES = (1, 5, 15, 60)
 LEASE = timedelta(minutes=10)  # a leased row is handed out again if nobody reports back in this time
 
 
@@ -29,10 +32,14 @@ def status_of(row: Outbox, now: datetime) -> str:
         return "dry_run"
     if row.delivered_at is not None:
         return "delivered"
+    if row.dismissed_at is not None:
+        return "dismissed"
     if row.attempts >= MAX_ATTEMPTS and (row.leased_at is None or utc(row.leased_at) < now - LEASE):
         return "dead"
     if row.leased_at is not None and utc(row.leased_at) >= now - LEASE:
         return "leased"
+    if row.next_attempt_at is not None and utc(row.next_attempt_at) > now:
+        return "retrying"
     return "pending"
 
 
@@ -56,8 +63,10 @@ def _lease_rows(session: Session, channels: frozenset[str], now: datetime, limit
             Outbox.mode == "live",
             Outbox.channel.in_(channels),
             Outbox.delivered_at.is_(None),
+            Outbox.dismissed_at.is_(None),
             Outbox.attempts < MAX_ATTEMPTS,
             or_(Outbox.leased_at.is_(None), Outbox.leased_at < now - LEASE),
+            or_(Outbox.next_attempt_at.is_(None), Outbox.next_attempt_at <= now),
         )
         .order_by(Outbox.id)
         .limit(limit)
@@ -90,8 +99,7 @@ def lease_pending(
         cfg = _cfg_for(row, projects, single)
         url = env.get(webhook_env_for(cfg, row.channel), "") if cfg else ""
         if not url.startswith("https://"):
-            row.leased_at = None
-            row.last_error = "no webhook configured for this row's project"
+            _release(row, "no webhook configured for this row's project", now)
             continue
         target, text = row.target, row.body
         if redirect_target:
@@ -135,7 +143,7 @@ def _live_row(session: Session, outbox_id: int) -> Outbox:
 def mark_sent(session: Session, outbox_id: int, now: datetime) -> Outbox:
     row = _live_row(session, outbox_id)
     if row.delivered_at is None:
-        row.delivered_at, row.last_error = now, None
+        row.delivered_at, row.last_error, row.next_attempt_at = now, None, None
         nudge = session.get(Nudge, row.nudge_id) if row.nudge_id else None
         if nudge is not None and nudge.status == "queued":
             nudge.status, nudge.sent_at = "sent", now
@@ -143,10 +151,20 @@ def mark_sent(session: Session, outbox_id: int, now: datetime) -> Outbox:
     return row
 
 
-def mark_failed(session: Session, outbox_id: int, error: str) -> Outbox:
+def _release(row: Outbox, error: str, now: datetime) -> None:
+    """Give the row back after a failed attempt and schedule the next one."""
+    row.leased_at = None
+    row.last_error = error[:500]
+    if row.attempts < MAX_ATTEMPTS:
+        wait = BACKOFF_MINUTES[min(max(row.attempts, 1), len(BACKOFF_MINUTES)) - 1]
+        row.next_attempt_at = now + timedelta(minutes=wait)
+    else:
+        row.next_attempt_at = None  # dead: nothing is scheduled
+
+
+def mark_failed(session: Session, outbox_id: int, error: str, now: datetime) -> Outbox:
     row = _live_row(session, outbox_id)
     if row.delivered_at is None:
-        row.leased_at = None  # eligible again straight away, until MAX_ATTEMPTS
-        row.last_error = error[:500]
+        _release(row, error, now)
         session.commit()
     return row

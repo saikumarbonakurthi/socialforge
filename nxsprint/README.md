@@ -2,7 +2,7 @@
 
 AI scrum master for SRIA Infotech. Reads GitHub Projects v2, detects problems with deterministic rules, nudges the right person, prepares ceremonies. Dry-run by default. Humans stay accountable.
 
-Status: **Phase 7** (everything up to the escalation ladder with feature flagged WhatsApp for critical items; dry run by default). Hardening and runbook (Phase 8) not done yet.
+Status: **all 8 phases built** (sync, rules, nudges, Claude wording, n8n, Teams two way, standup, ceremonies, escalation with feature flagged WhatsApp, hardening). Dry run by default. Nothing has been run against real GitHub, Teams, Claude, WhatsApp or Docker yet: start with `docs/go-live-checklist.md`.
 
 ## Layout
 `core/` FastAPI service (`app/{api,domain,integrations,llm,jobs}`, `alembic/`, `tests/`), `n8n/workflows/`, `config/`, `docs/`.
@@ -30,6 +30,8 @@ Teams two way (Phase 5): with the Azure bot configured (`docs/teams-setup.md`), 
 Ceremonies (Phase 6): planning proposal and retro prep go to the project lead, a weekly report goes to the owner. Proposals only, nothing on the board is changed. Timing and priority order are required config (`priority_order`, `ceremonies`). See `docs/ceremonies.md`; `make demo` prints all three.
 
 Escalation (Phase 7): unacknowledged nudges climb a ladder (team channel, then the lead by Teams DM, then for critical items only a WhatsApp template to the lead). WhatsApp is off by default behind `NXSPRINT_WHATSAPP_ENABLED`, capped per person per day, and impossible while a test redirect is active. What counts as critical is required config (`critical`). See `docs/escalation.md`.
+
+Operations (Phase 8): retries back off (1, 5, 15, 60 minutes) and give up after 5, parked rows are failed over (bot to webhook), reported to the owner once, and can be retried or dismissed by hand. One project failing does not stop the others. `GET /status` and `GET /metrics` (Prometheus) need the bearer secret. `make backup`, `make restore`, `make smoke`. The coverage gate for `domain/` is 85%. See `docs/runbook.md`.
 
 Dev without Docker (Python 3.12): `make install && make migrate && make test && make lint`.
 

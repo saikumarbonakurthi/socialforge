@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, require_auth
+from app.api.deps import fail_if_any, get_db, guarded, require_auth
 from app.domain.board import load_board
 from app.domain.delivery import DeliveryError, lease_pending, mark_failed, mark_sent, status_of
 from app.domain.nudges import run_nudges
@@ -50,26 +50,37 @@ def run_nudge_job(request: Request, db: Session = Depends(get_db)) -> dict:
         if project is None:
             out.append({"project": cfg.name, "error": "not synced yet, run /jobs/sync first"})
             continue
-        use_bot = state.settings.bot_enabled and not state.settings.delivery_redirect_target
-        r = run_nudges(db, project, cfg, state.settings.mode, now, getattr(state, "phraser", None), use_bot)
-        out.append(
-            {
-                "project": cfg.name,
-                "findings": r.findings,
-                "created": [_nudge(n) for n in r.created],
-                "deferred_outside_hours": r.deferred_outside_hours,
-                "skipped_cooldown": r.skipped_cooldown,
-                "skipped_no_recipient": r.skipped_no_recipient,
-                "phrasing": dict(r.phrasing),
-            }
-        )
+        with guarded(db, cfg.name, out):
+            use_bot = state.settings.bot_enabled and not state.settings.delivery_redirect_target
+            r = run_nudges(
+                db, project, cfg, state.settings.mode, now, getattr(state, "phraser", None), use_bot
+            )
+            out.append(
+                {
+                    "project": cfg.name,
+                    "findings": r.findings,
+                    "created": [_nudge(n) for n in r.created],
+                    "deferred_outside_hours": r.deferred_outside_hours,
+                    "skipped_cooldown": r.skipped_cooldown,
+                    "skipped_no_recipient": r.skipped_no_recipient,
+                    "phrasing": dict(r.phrasing),
+                }
+            )
+    fail_if_any(out)
     return {"mode": state.settings.mode.value, "projects": out}
 
 
 @router.get("/outbox")
-def get_outbox(request: Request, limit: int = 100, db: Session = Depends(get_db)) -> list[dict]:
+def get_outbox(
+    request: Request, limit: int = 100, status: str | None = None, db: Session = Depends(get_db)
+) -> list[dict]:
     now = getattr(request.app.state, "clock", lambda: datetime.now(UTC))()
-    rows = db.scalars(select(Outbox).order_by(Outbox.id.desc()).limit(min(limit, 500)))
+    cap = min(limit, 500)
+    if status is None:
+        rows = list(db.scalars(select(Outbox).order_by(Outbox.id.desc()).limit(cap)))
+    else:  # the status is computed, so scan recent rows and filter, e.g. status=dead
+        recent = db.scalars(select(Outbox).order_by(Outbox.id.desc()).limit(5000))
+        rows = [o for o in recent if status_of(o, now) == status][:cap]
     return [
         {
             "id": o.id,
@@ -130,8 +141,9 @@ def outbox_sent(outbox_id: int, request: Request, db: Session = Depends(get_db))
 
 
 @router.post("/outbox/{outbox_id}/failed")
-def outbox_failed(outbox_id: int, body: FailedBody, db: Session = Depends(get_db)) -> dict:
-    return _outcome(mark_failed, db, outbox_id, body.error)
+def outbox_failed(outbox_id: int, body: FailedBody, request: Request, db: Session = Depends(get_db)) -> dict:
+    clock = getattr(request.app.state, "clock", lambda: datetime.now(UTC))
+    return _outcome(mark_failed, db, outbox_id, body.error, clock())
 
 
 @router.get("/nudges")

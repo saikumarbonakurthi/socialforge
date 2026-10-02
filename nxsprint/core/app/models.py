@@ -116,6 +116,9 @@ class Outbox(Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # retry backoff
+    dead_alerted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Escalation(Base):

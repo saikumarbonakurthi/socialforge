@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.api.deps import clock, configured_projects, get_db, require_auth, use_bot
+from app.api.deps import clock, configured_projects, fail_if_any, get_db, guarded, require_auth, use_bot
 from app.domain import ceremonies as c
 from app.domain.board import load_board
 from app.domain.escalation import run_escalations
@@ -18,9 +18,11 @@ def _run(request: Request, db: Session, fn, *, bot: bool) -> dict:
         if project is None:
             out.append({"project": cfg.name, "error": "not synced yet, run /jobs/sync first"})
             continue
-        args = (db, project, cfg, mode, clock(request)) + ((use_bot(request),) if bot else ())
-        why_not = fn(*args)
-        out.append({"project": cfg.name, "queued": why_not is None, "why_not": why_not})
+        with guarded(db, cfg.name, out):
+            args = (db, project, cfg, mode, clock(request)) + ((use_bot(request),) if bot else ())
+            why_not = fn(*args)
+            out.append({"project": cfg.name, "queued": why_not is None, "why_not": why_not})
+    fail_if_any(out)
     return {"mode": mode.value, "projects": out}
 
 
@@ -77,13 +79,15 @@ def escalations_job(request: Request, db: Session = Depends(get_db)) -> dict:
         if project is None:
             out.append({"project": cfg.name, "error": "not synced yet, run /jobs/sync first"})
             continue
-        r = run_escalations(
-            db, project, cfg, state.settings.mode, clock(request),
-            use_bot=use_bot(request),
-            whatsapp_enabled=state.settings.whatsapp_enabled,
-            redirect_active=bool(state.settings.delivery_redirect_target),
-        )  # fmt: skip
-        out.append({"project": cfg.name, **r.__dict__})
+        with guarded(db, cfg.name, out):
+            r = run_escalations(
+                db, project, cfg, state.settings.mode, clock(request),
+                use_bot=use_bot(request),
+                whatsapp_enabled=state.settings.whatsapp_enabled,
+                redirect_active=bool(state.settings.delivery_redirect_target),
+            )  # fmt: skip
+            out.append({"project": cfg.name, **r.__dict__})
+    fail_if_any(out)
     return {
         "mode": state.settings.mode.value,
         "whatsapp_enabled": state.settings.whatsapp_enabled,

@@ -1,4 +1,5 @@
 import json
+from datetime import timedelta
 
 import httpx
 import pytest
@@ -210,8 +211,11 @@ def test_whatsapp_failures_retry_then_park_without_leaking_the_number(settings, 
     with TestClient(app) as c:
         app.state.whatsapp = FakeWhatsApp(fail=True)
         seed_and_escalate(app, c)
-        for _ in range(MAX_ATTEMPTS):
+        base = ist(10, 2, 10, 0)
+        for i in range(MAX_ATTEMPTS):
+            app.state.clock = lambda i=i: base + timedelta(hours=2 * i)
             assert c.post("/jobs/deliver_whatsapp", headers=AUTH).json()["failed"] == 1
+        app.state.clock = lambda: base + timedelta(days=2)
         assert c.post("/jobs/deliver_whatsapp", headers=AUTH).json()["failed"] == 0
         wa = next(r for r in c.get("/outbox", headers=AUTH).json() if r["channel"] == "whatsapp")
         assert (

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, require_auth
+from app.api.deps import fail_if_any, get_db, guarded, require_auth
 from app.domain.sync import sync_project
 from app.integrations.github import GitHubClient, GitHubError
 
@@ -20,12 +20,14 @@ def run_sync(request: Request, db: Session = Depends(get_db)) -> dict:
     """Read-only against GitHub, so it is allowed in dry_run too."""
     factory = getattr(request.app.state, "github_client_factory", default_client_factory)
     client = factory(request)
-    results = []
+    results: list = []
     for cfg in request.app.state.config.projects:
-        try:
-            data = client.fetch_project(cfg.github.org, cfg.github.project_number, cfg.fields)
-        except GitHubError as exc:
-            raise HTTPException(502, f"{cfg.name}: {exc}") from exc
-        r = sync_project(db, cfg, data)
-        results.append(r.__dict__)
+        with guarded(db, cfg.name, results):
+            try:
+                data = client.fetch_project(cfg.github.org, cfg.github.project_number, cfg.fields)
+            except GitHubError as exc:
+                results.append({"project": cfg.name, "error": str(exc), "failed": True})
+                continue
+            results.append(sync_project(db, cfg, data).__dict__)
+    fail_if_any(results, status=502)
     return {"projects": results}

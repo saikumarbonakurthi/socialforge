@@ -1,5 +1,7 @@
+import logging
 import secrets
 from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 
 from fastapi import Depends, HTTPException, Request
@@ -41,3 +43,25 @@ def configured_projects(request: Request, db: Session):
     """Yield (config, stored project or None) for every configured project."""
     for cfg in request.app.state.config.projects:
         yield cfg, db.scalar(select(Project).where(Project.name == cfg.name))
+
+
+log = logging.getLogger("nxsprint.jobs")
+
+
+@contextmanager
+def guarded(db: Session, name: str, out: list):
+    """One project failing must not stop the others. The failure is logged and reported in the response."""
+    try:
+        yield
+    except HTTPException:
+        raise
+    except Exception:
+        db.rollback()
+        log.exception("job failed for project %s", name)
+        out.append({"project": name, "error": "failed, see the logs", "failed": True})
+
+
+def fail_if_any(out: list, status: int = 500) -> None:
+    """After every project has been tried: a non 2xx response so n8n marks the execution as failed."""
+    if any(r.get("failed") for r in out):
+        raise HTTPException(status, detail={"projects": out})

@@ -11,6 +11,7 @@ n8n is only the scheduler and the courier. All logic and all state live in core.
 | `cron-ceremonies` | every 30 minutes on weekdays | `POST /jobs/planning_prep`, then `POST /jobs/retro_prep` (core decides what is due, once per sprint) |
 | `cron-weekly-report` | every 30 minutes on weekdays | `POST /jobs/weekly_report` (core sends on the configured weekday and time, once a week) |
 | `escalation-whatsapp` | every minute | `POST /jobs/deliver_whatsapp`. A no-op unless `NXSPRINT_WHATSAPP_ENABLED=true` and the app is live. Core sends the template itself, the token never leaves core |
+| `cron-maintenance` | hourly | `POST /jobs/dead_letters` then `POST /jobs/prune`. Fails bot messages over to the webhook, alerts the owner once about anything that gave up, prunes old rows if retention is set |
 | `deliver-bot` | every minute | `POST /jobs/deliver_bot`. Core sends live bot DMs itself because the bot token never leaves core |
 
 All workflows from the spec exist now.
@@ -31,7 +32,7 @@ These files were written to n8n's export format by hand and checked by tests for
 ## Delivery guarantees
 Core leases each live row for 10 minutes when n8n fetches it. n8n posts it, then reports back.
 - Success: the row is marked delivered and its nudge becomes `sent`.
-- Failure: the row is released straight away and retried on the next poll, up to 5 attempts, then it is parked as `dead` (visible at `GET /outbox`).
+- Failure: the row is retried after 1, then 5, 15 and 60 minutes, and after 5 attempts it is parked as `dead` (visible at `GET /outbox?status=dead`, handled by `cron-maintenance`, see `docs/runbook.md`).
 - n8n crashes after posting but before reporting: the row is handed out again after 10 minutes, so one duplicate message is possible. This is at least once delivery, not exactly once.
 
 ## Going live on one test channel

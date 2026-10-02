@@ -27,3 +27,6 @@ def configure_logging() -> None:
     root = logging.getLogger()
     root.handlers = [handler]
     root.setLevel(logging.INFO)
+    # HTTP libraries log full request URLs at INFO. Some of ours carry ids or signatures, so keep them quiet.
+    for noisy in ("httpx", "httpx2", "httpcore", "anthropic", "urllib3"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)

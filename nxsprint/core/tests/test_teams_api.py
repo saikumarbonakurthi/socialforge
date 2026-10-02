@@ -185,8 +185,10 @@ def test_bot_rows_are_not_offered_to_n8n_but_are_sent_by_core(live):
 def test_bot_send_failure_is_retried_then_parked(live):
     app, c = live
     app.state.bot = FakeBot(fail=True)
-    for _ in range(5):
+    for i in range(5):  # two hours apart, longer than any backoff step
+        app.state.clock = lambda i=i: NOW + timedelta(hours=2 * i)
         assert c.post("/jobs/deliver_bot", headers=AUTH).json()["failed"] == 1
+    app.state.clock = lambda: NOW + timedelta(days=2)
     assert c.post("/jobs/deliver_bot", headers=AUTH).json()["failed"] == 0  # attempts used up
     row = next(r for r in c.get("/outbox", headers=AUTH).json() if r["channel"] == "teams_bot")
     assert row["status"] == "dead" and row["attempts"] == 5 and "connector down" in row["last_error"]

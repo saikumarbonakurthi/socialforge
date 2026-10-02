@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import clock as _now
 from app.api.deps import configured_projects as _projects
-from app.api.deps import get_db, require_auth
+from app.api.deps import fail_if_any, get_db, guarded, require_auth
 from app.api.deps import use_bot as _use_bot
 from app.domain.bot_inbound import handle_activity
 from app.domain.delivery import lease_bot_rows, lease_whatsapp_rows, mark_failed, mark_sent
@@ -68,10 +68,12 @@ def standup_job(request: Request, db: Session = Depends(get_db)) -> dict:
         if project is None:
             out.append({"project": cfg.name, "error": "not synced yet, run /jobs/sync first"})
             continue
-        r = run_standup_prompts(
-            db, project, cfg, request.app.state.settings.mode, _now(request), _use_bot(request)
-        )
-        out.append({"project": cfg.name, **r.__dict__})
+        with guarded(db, cfg.name, out):
+            r = run_standup_prompts(
+                db, project, cfg, request.app.state.settings.mode, _now(request), _use_bot(request)
+            )
+            out.append({"project": cfg.name, **r.__dict__})
+    fail_if_any(out)
     return {"projects": out}
 
 
@@ -82,8 +84,10 @@ def standup_summary_job(request: Request, db: Session = Depends(get_db)) -> dict
         if project is None:
             out.append({"project": cfg.name, "error": "not synced yet, run /jobs/sync first"})
             continue
-        why_not = post_standup_summary(db, project, cfg, request.app.state.settings.mode, _now(request))
-        out.append({"project": cfg.name, "posted": why_not is None, "why_not": why_not})
+        with guarded(db, cfg.name, out):
+            why_not = post_standup_summary(db, project, cfg, request.app.state.settings.mode, _now(request))
+            out.append({"project": cfg.name, "posted": why_not is None, "why_not": why_not})
+    fail_if_any(out)
     return {"projects": out}
 
 
@@ -102,13 +106,13 @@ def deliver_bot_job(request: Request, db: Session = Depends(get_db)) -> dict:
             else None
         )
         if conv is None:
-            mark_failed(db, row.id, "no stored conversation for this member")
+            mark_failed(db, row.id, "no stored conversation for this member", _now(request))
             failed += 1
             continue
         try:
             state.bot.send_text(conv.service_url, conv.conversation_id, row.body)
         except Exception as exc:
-            mark_failed(db, row.id, f"{type(exc).__name__}: {str(exc)[:200]}")
+            mark_failed(db, row.id, f"{type(exc).__name__}: {str(exc)[:200]}", _now(request))
             failed += 1
         else:
             mark_sent(db, row.id, _now(request))
@@ -130,7 +134,7 @@ def deliver_whatsapp_job(request: Request, db: Session = Depends(get_db)) -> dic
                 row.target, payload["template"], payload["language"], payload["params"]
             )
         except Exception as exc:  # the error text never contains the number, see WhatsAppClient
-            mark_failed(db, row.id, f"{type(exc).__name__}: {str(exc)[:200]}")
+            mark_failed(db, row.id, f"{type(exc).__name__}: {str(exc)[:200]}", _now(request))
             failed += 1
         else:
             mark_sent(db, row.id, _now(request))

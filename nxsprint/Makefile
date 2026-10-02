@@ -1,4 +1,4 @@
-.PHONY: env up down test lint migrate install demo
+.PHONY: env up down test lint migrate install demo smoke backup restore
 
 install:
 	cd core && pip install -e '.[dev]'
@@ -17,7 +17,7 @@ down:
 	docker compose down
 
 test:
-	cd core && python -m pytest --cov=app --cov-report=term-missing
+	cd core && python -m pytest --cov=app.domain --cov-fail-under=85 --cov-report=term-missing
 
 lint:
 	cd core && ruff check . && ruff format --check .
@@ -27,3 +27,19 @@ demo:
 
 migrate:
 	cd core && alembic upgrade head
+
+smoke:
+	@set -a; . ./.env; set +a; \
+	curl -fsS localhost:8000/health && echo && \
+	curl -fsS -H "Authorization: Bearer $$NXSPRINT_API_SECRET" localhost:8000/status
+
+backup:
+	@set -a; . ./.env; set +a; mkdir -p backups; \
+	f=backups/nxsprint-$$(date +%Y%m%d-%H%M%S).dump; \
+	docker compose exec -T postgres pg_dump -U $$POSTGRES_USER -d $$POSTGRES_DB -Fc > $$f && echo "wrote $$f"
+
+# make restore FILE=backups/nxsprint-20260101-020000.dump   (replaces the current data, stop core first)
+restore:
+	@test -n "$(FILE)" || { echo "usage: make restore FILE=backups/<dump>"; exit 1; }
+	@set -a; . ./.env; set +a; \
+	docker compose exec -T postgres pg_restore -U $$POSTGRES_USER -d $$POSTGRES_DB --clean --if-exists < $(FILE)
