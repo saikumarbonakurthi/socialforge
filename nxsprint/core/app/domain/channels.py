@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.config import ProjectCfg
 from app.models import TeamsConversation
 
-WEBHOOK_CHANNELS = frozenset({"teams_dm", "owner_alert", "teams_team"})  # n8n posts these
+WEBHOOK_CHANNELS = frozenset({"teams_dm", "owner_alert", "owner_report", "teams_team"})  # n8n posts these
 BOT_CHANNEL = "teams_bot"  # core posts these through the Bot Framework connector
 BOT_FOOTER = "Reply ack when you have seen this."
 

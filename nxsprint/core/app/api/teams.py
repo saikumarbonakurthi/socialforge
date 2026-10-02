@@ -1,31 +1,23 @@
 import logging
-from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.deps import clock as _now
+from app.api.deps import configured_projects as _projects
 from app.api.deps import get_db, require_auth
+from app.api.deps import use_bot as _use_bot
 from app.domain.bot_inbound import handle_activity
 from app.domain.delivery import lease_bot_rows, mark_failed, mark_sent
 from app.domain.standup import post_standup_summary, run_standup_prompts
 from app.integrations.teams_bot import BotAuthError, verify_activity
-from app.models import Member, Outbox, Project, TeamsConversation
+from app.models import Member, Outbox, TeamsConversation
 from app.settings import Mode
 
 log = logging.getLogger("nxsprint.teams")
 webhook_router = APIRouter(prefix="/webhooks")
 jobs_router = APIRouter(prefix="/jobs", dependencies=[Depends(require_auth)])
-
-
-def _now(request: Request) -> datetime:
-    return getattr(request.app.state, "clock", lambda: datetime.now(UTC))()
-
-
-def _use_bot(request: Request) -> bool:
-    """Bot DMs only when the bot is configured and no test redirect is active (the redirect is webhook only)."""
-    s = request.app.state.settings
-    return s.bot_enabled and not s.delivery_redirect_target
 
 
 @webhook_router.post("/teams")
@@ -66,12 +58,6 @@ async def teams_webhook(request: Request, db: Session = Depends(get_db)) -> dict
             )
     db.commit()
     return {"handled": True, "replies": len(replies)}
-
-
-def _projects(request: Request, db: Session):
-    for cfg in request.app.state.config.projects:
-        project = db.scalar(select(Project).where(Project.name == cfg.name))
-        yield cfg, project
 
 
 @jobs_router.post("/standup")

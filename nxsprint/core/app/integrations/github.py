@@ -63,6 +63,7 @@ class WorkItem:
     sprint_days: int | None
     labels: tuple[str, ...]
     updated_at: datetime
+    priority: str | None = None
 
 
 @dataclass(frozen=True)
@@ -80,11 +81,13 @@ def parse_item(node: dict, fields: FieldMappings) -> WorkItem | None:
     content = node.get("content")
     if not content:
         return None
-    status = estimate = sprint = start = days = None
+    status = estimate = sprint = start = days = priority = None
     for fv in node["fieldValues"]["nodes"]:
         name = (fv.get("field") or {}).get("name")
         if name == fields.status and "name" in fv:
             status = fv["name"]
+        elif name == fields.priority and "name" in fv:
+            priority = fv["name"]
         elif name == fields.estimate and "number" in fv:
             estimate = fv["number"]
         elif name == fields.sprint and "title" in fv:
@@ -106,6 +109,7 @@ def parse_item(node: dict, fields: FieldMappings) -> WorkItem | None:
         sprint_days=days,
         labels=labels,
         updated_at=_dt(content.get("updatedAt") or node["updatedAt"]),
+        priority=priority,
     )
 
 

@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 
-from app.api import health, jobs, nudges, teams, webhooks
+from app.api import ceremonies, health, jobs, nudges, teams, webhooks
 from app.config import load_config
 from app.db import make_engine, make_session_factory
 from app.domain.delivery import check_live_ready
@@ -78,6 +78,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(webhooks.router)
     app.include_router(teams.webhook_router)
     app.include_router(teams.jobs_router)
+    app.include_router(ceremonies.jobs_router)
+    app.include_router(ceremonies.view_router)
     return app
 
 

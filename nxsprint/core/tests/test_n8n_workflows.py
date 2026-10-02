@@ -15,6 +15,8 @@ EXPECTED_SCHEDULE = {
     "deliver-outbox": ("minutes", 1),
     "deliver-bot": ("minutes", 1),
     "cron-standup": ("cronExpression", "*/15 * * * 1-5"),
+    "cron-weekly-report": ("cronExpression", "*/30 * * * 1-5"),
+    "cron-ceremonies": ("cronExpression", "*/30 * * * 1-5"),
 }
 
 

@@ -34,6 +34,7 @@ class ItemView:
     updated_at: datetime
     status_since: datetime  # lower bound: first time we saw the current status
     blocked_since: datetime | None  # first time we saw the blocked label, if present now
+    priority: str | None = None
 
 
 @dataclass(frozen=True)

@@ -67,6 +67,7 @@ class WorkItemSnapshot(Base):
     title: Mapped[str] = mapped_column(Text)
     url: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str | None] = mapped_column(String(100))
+    priority: Mapped[str | None] = mapped_column(String(100))
     assignee_login: Mapped[str | None] = mapped_column(String(100))
     estimate: Mapped[float | None] = mapped_column(Float)
     sprint_id: Mapped[int | None] = mapped_column(ForeignKey("sprint.id"))

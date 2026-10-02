@@ -16,6 +16,13 @@ from app.db import make_engine, make_session_factory
 from app.domain.board import load_board
 from app.domain.bot_inbound import handle_activity
 from app.domain.calendar import is_working_day, working_days_between
+from app.domain.ceremonies import (
+    build_planning,
+    build_retro,
+    build_weekly,
+    render_planning,
+    render_retro,
+)
 from app.domain.nudges import run_nudges
 from app.domain.standup import post_standup_summary, run_standup_prompts
 from app.domain.sync import sync_project
@@ -26,7 +33,7 @@ from app.settings import Mode
 DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "config" / "projects.example.yaml"
 
 
-def _item(n, title, status, who, est, sprint, labels=(), updated=None, now=None) -> WorkItem:
+def _item(n, title, status, who, est, sprint, labels=(), updated=None, now=None, priority=None) -> WorkItem:
     return WorkItem(
         issue_node_id=f"I_demo{n}",
         title=title,
@@ -39,6 +46,7 @@ def _item(n, title, status, who, est, sprint, labels=(), updated=None, now=None)
         sprint_days=14,
         labels=tuple(labels),
         updated_at=updated or now,
+        priority=priority,
     )
 
 
@@ -71,6 +79,20 @@ def board(now: datetime, moved: bool) -> ProjectData:
             now=now,
         ),
         _item(6, "Update onboarding copy", "Done", "asha-demo", 1, sprint, updated=d(7), now=now),
+    ]
+
+    def backlog(n, title, priority, est):
+        return WorkItem(
+            f"I_demo{n}", title, f"https://github.com/sria-demo/demo-app/issues/{n}", "Todo", None, est,
+            None, None, None, (), now, priority,
+        )  # fmt: skip
+
+    items += [
+        backlog(7, "Dark mode", "Medium", 5),
+        backlog(8, "Rate limit login", "Urgent", 8),
+        backlog(9, "Invoice PDF export", "High", 13),
+        backlog(10, "Archive old projects", "Low", 3),
+        backlog(11, "Fix timezone bug", "High", None),
     ]
     return ProjectData("PVT_demo", items)
 
@@ -109,6 +131,15 @@ def standup_demo(session, cfg, project, now) -> None:
     print("Team summary (Asha did not reply):\n" + (summary.body if summary else f"not posted: {why}"))
 
 
+def ceremonies_demo(session, cfg, project, now) -> None:
+    """The three read only views, as the lead and the owner would receive them."""
+    plan = build_planning(load_board(session, project, cfg, now))
+    print("\n--- Planning proposal for the lead ---\n" + render_planning(plan, cfg))
+    retro = build_retro(session, project, cfg, now)
+    print("\n--- Review and retro prep for the lead ---\n" + render_retro(retro, cfg))
+    print("\n--- Weekly report for the owner ---\n" + build_weekly(session, project, cfg, now))
+
+
 def main() -> int:
     cfg_path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_CONFIG
     cfg = load_config(cfg_path, Mode.DRY_RUN).projects[0]
@@ -145,6 +176,7 @@ def main() -> int:
     print(f"Running again straight away creates {created} (skipped {skipped} on cooldown).")
 
     standup_demo(session, cfg, project, now)
+    ceremonies_demo(session, cfg, project, now)
     return 0
 
 

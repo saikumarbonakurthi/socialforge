@@ -2,7 +2,7 @@
 
 AI scrum master for SRIA Infotech. Reads GitHub Projects v2, detects problems with deterministic rules, nudges the right person, prepares ceremonies. Dry-run by default. Humans stay accountable.
 
-Status: **Phase 5** (sync, rules, nudges, Claude wording, n8n, Teams outbound and two way: acks, standup; dry run by default). No planning, retro or owner report yet.
+Status: **Phase 6** (sync, rules, nudges, Claude wording, n8n, Teams two way, standup, planning and retro prep, weekly owner report; dry run by default). No WhatsApp escalation or hardening yet.
 
 ## Layout
 `core/` FastAPI service (`app/{api,domain,integrations,llm,jobs}`, `alembic/`, `tests/`), `n8n/workflows/`, `config/`, `docs/`.
@@ -26,6 +26,8 @@ Wording (Phase 3): rules decide who and why; Claude only phrases. Off by default
 Delivery (Phase 4): in `dry_run` nothing is ever sent. In `live`, the `deliver-outbox` n8n workflow fetches leased rows from `GET /outbox/pending`, posts them to the Power Automate webhook, and reports back (`POST /outbox/{id}/sent` or `/failed`, 5 attempts then dead). Live mode refuses to start without an https webhook, and `NXSPRINT_DELIVERY_REDIRECT_TARGET` sends everything to a test target first. See `docs/n8n.md` and `docs/teams-outbound.md`.
 
 Teams two way (Phase 5): with the Azure bot configured (`docs/teams-setup.md`), people reply `ack` to nudges and answer a daily standup prompt (Done, Doing, Blocked); one deterministic team summary is posted at `standup_summary_time`. The bot is used only for people who have messaged it, everyone else is reached through the webhook. Inbound requests are verified against Microsoft's signature, audience, issuer and service URL.
+
+Ceremonies (Phase 6): planning proposal and retro prep go to the project lead, a weekly report goes to the owner. Proposals only, nothing on the board is changed. Timing and priority order are required config (`priority_order`, `ceremonies`). See `docs/ceremonies.md`; `make demo` prints all three.
 
 Dev without Docker (Python 3.12): `make install && make migrate && make test && make lint`.
 

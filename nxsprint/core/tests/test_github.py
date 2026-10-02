@@ -39,6 +39,7 @@ def test_pagination_and_parsing():
         date(2026, 9, 21),
         14,
     )
+    assert first.priority == "High" and data.items[1].priority is None
     assert first.labels == ("blocked", "ui")
     assert first.updated_at.isoformat() == "2026-09-30T08:30:00+00:00"
     assert data.items[1].assignee_login is None and data.items[1].estimate is None

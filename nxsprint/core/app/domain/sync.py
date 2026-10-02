@@ -83,6 +83,7 @@ def _changed(old: WorkItemSnapshot, new: WorkItemSnapshot) -> bool:
     return (
         old.title,
         old.status,
+        old.priority,
         old.assignee_login,
         old.estimate,
         old.sprint_id,
@@ -91,6 +92,7 @@ def _changed(old: WorkItemSnapshot, new: WorkItemSnapshot) -> bool:
     ) != (
         new.title,
         new.status,
+        new.priority,
         new.assignee_login,
         new.estimate,
         new.sprint_id,
@@ -122,6 +124,7 @@ def sync_project(
             title=item.title,
             url=item.url,
             status=item.status,
+            priority=item.priority,
             assignee_login=item.assignee_login,
             estimate=item.estimate,
             sprint_id=sprint.id if sprint else None,

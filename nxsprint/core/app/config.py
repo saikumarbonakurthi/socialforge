@@ -118,6 +118,15 @@ class Escalation(_Strict):
     ack_hours_before_lead: int = Field(gt=0)
 
 
+class Ceremonies(_Strict):
+    """When ceremony prep goes out. Working days are counted after today, so 0 means the last working day."""
+
+    planning_prep_working_days_before_sprint_end: int = Field(ge=0)
+    retro_prep_working_days_before_sprint_end: int = Field(ge=0)
+    weekly_report_weekday: int = Field(ge=1, le=7)  # ISO, 1 = Monday
+    weekly_report_time: time
+
+
 class ChannelRouting(_Strict):
     # Names of env vars holding webhook URLs. The URLs themselves are secrets.
     team_webhook_env: str
@@ -138,6 +147,9 @@ class ProjectCfg(_Strict):
     holidays: list[date]  # explicit, may be empty
     standup_time: time
     standup_summary_time: time  # the team summary is posted from this time on
+    # Priority field values from most to least urgent. Anything else ranks last.
+    priority_order: list[str] = Field(min_length=1)
+    ceremonies: Ceremonies
     members: list[MemberCfg] = Field(min_length=1)
     cooldowns: Cooldowns
     thresholds: Thresholds
@@ -157,6 +169,14 @@ class ProjectCfg(_Strict):
     def _summary_after_prompt(self) -> "ProjectCfg":
         if self.standup_summary_time <= self.standup_time:
             raise ValueError("standup_summary_time must be later than standup_time")
+        return self
+
+    @model_validator(mode="after")
+    def _ceremony_rules(self) -> "ProjectCfg":
+        if len(set(self.priority_order)) != len(self.priority_order):
+            raise ValueError("priority_order has duplicates")
+        if self.ceremonies.weekly_report_weekday not in self.working_days:
+            raise ValueError("weekly_report_weekday must be one of working_days")
         return self
 
     @model_validator(mode="after")

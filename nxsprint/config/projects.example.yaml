@@ -15,6 +15,12 @@ projects:
     holidays: []
     standup_time: "09:45"
     standup_summary_time: "10:30"
+    priority_order: [Urgent, High, Medium, Low]
+    ceremonies:
+      planning_prep_working_days_before_sprint_end: 2
+      retro_prep_working_days_before_sprint_end: 0
+      weekly_report_weekday: 5
+      weekly_report_time: "16:00"
     members:
       - {name: Asha, github_login: asha-demo, teams_user_id: demo-asha, role: lead,
          timezone: Asia/Kolkata, capacity_points: 20}

@@ -50,6 +50,7 @@ def load_board(session: Session, project: Project, cfg: ProjectCfg, now: datetim
                 title=cur.title,
                 url=cur.url,
                 status=cur.status,
+                priority=cur.priority,
                 assignee_login=cur.assignee_login,
                 estimate=cur.estimate,
                 sprint_name=sprints[cur.sprint_id].name if cur.sprint_id else None,
