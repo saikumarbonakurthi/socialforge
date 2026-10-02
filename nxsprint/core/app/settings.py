@@ -1,0 +1,29 @@
+"""Environment settings. Secrets live in env only (rule 5)."""
+
+from enum import StrEnum
+from functools import lru_cache
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Mode(StrEnum):
+    DRY_RUN = "dry_run"
+    LIVE = "live"
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="NXSPRINT_", env_file=".env", extra="ignore")
+
+    mode: Mode = Mode.DRY_RUN  # rule 1: dry-run by default
+    api_secret: str = Field(min_length=16)  # shared bearer secret, no default on purpose
+    database_url: str = "sqlite:///./nxsprint.db"
+    config_path: str = "../config/projects.yaml"
+    # Read in Phase 3; never hardcode a model string (section 2).
+    llm_model: str | None = Field(default=None, validation_alias="NXSPRINT_MODEL")
+    max_daily_usd: float | None = None
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()  # type: ignore[call-arg]
