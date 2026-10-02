@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 
-from app.api import health
+from app.api import health, jobs, webhooks
 from app.config import load_config
 from app.db import make_engine, make_session_factory
 from app.logging import configure_logging, request_id_var
@@ -25,9 +25,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         engine = make_engine(cfg_settings.database_url)
         app.state.engine = engine
         app.state.session_factory = make_session_factory(engine)
-        log.info(
-            "started mode=%s projects=%d", cfg_settings.mode.value, len(app.state.config.projects)
-        )
+        log.info("started mode=%s projects=%d", cfg_settings.mode.value, len(app.state.config.projects))
         yield
         engine.dispose()
 
@@ -50,6 +48,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return response
 
     app.include_router(health.router)
+    app.include_router(jobs.router)
+    app.include_router(webhooks.router)
     return app
 
 

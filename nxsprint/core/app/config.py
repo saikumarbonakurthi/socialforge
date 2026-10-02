@@ -93,8 +93,7 @@ class Cooldowns(_Strict):
         missing, unknown = set(RULE_IDS) - set(v), set(v) - set(RULE_IDS)
         if missing or unknown:
             raise ValueError(
-                f"cooldowns need exactly the rule ids; "
-                f"missing={sorted(missing)} unknown={sorted(unknown)}"
+                f"cooldowns need exactly the rule ids; missing={sorted(missing)} unknown={sorted(unknown)}"
             )
         if any(h <= 0 for h in v.values()):
             raise ValueError("cooldown hours must be positive")

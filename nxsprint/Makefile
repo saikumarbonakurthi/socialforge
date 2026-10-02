@@ -1,4 +1,4 @@
-.PHONY: env up down test lint migrate install
+.PHONY: env up down test lint migrate install demo
 
 install:
 	cd core && pip install -e '.[dev]'
@@ -21,6 +21,9 @@ test:
 
 lint:
 	cd core && ruff check . && ruff format --check .
+
+demo:
+	cd core && python -m app.demo
 
 migrate:
 	cd core && alembic upgrade head

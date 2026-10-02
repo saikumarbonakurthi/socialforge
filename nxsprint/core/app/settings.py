@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     # Read in Phase 3; never hardcode a model string (section 2).
     llm_model: str | None = Field(default=None, validation_alias="NXSPRINT_MODEL")
     max_daily_usd: float | None = None
+    github_token: str | None = None  # read-only scope for sync (rule 2)
+    github_webhook_secret: str | None = None
 
 
 @lru_cache
