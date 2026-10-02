@@ -126,7 +126,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ error: String(($json.error && $json.error.message) || 'post failed') }) }}"
+        "jsonBody": "={{ JSON.stringify({ error: String(($json.error && $json.error.message) || 'post failed'), attempt: $('Split items').item.json.attempt }) }}"
       },
       "id": "d6",
       "name": "Mark failed",

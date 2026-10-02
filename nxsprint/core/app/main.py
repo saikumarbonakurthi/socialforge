@@ -72,7 +72,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         rid = request.headers.get("x-request-id") or uuid.uuid4().hex
         request_id_var.set(rid)
         start = time.perf_counter()
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            app.state.http_counts["5xx"] += 1  # an unhandled error is still a failed request
+            raise
         response.headers["x-request-id"] = rid
         app.state.http_counts[f"{response.status_code // 100}xx"] += 1
         log.info(

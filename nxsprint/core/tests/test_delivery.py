@@ -213,3 +213,29 @@ def test_row_for_unknown_project_is_not_posted_and_says_why(live_settings):
         assert pending(c)["items"] == []
         row = c.get("/outbox", headers=AUTH).json()[0]
         assert "no webhook" in row["last_error"]
+
+
+def test_a_stale_failure_report_cannot_disturb_a_newer_lease(live):
+    app, c, _ = live
+    first = pending(c)["items"][0]
+    assert first["attempt"] == 1
+    # n8n is slow: the lease expires and the row is handed out again as attempt 2
+    app.state.clock = lambda: NOW + timedelta(minutes=11)
+    second = next(i for i in pending(c)["items"] if i["id"] == first["id"])
+    assert second["attempt"] == 2
+    # the first execution finally reports its failure
+    late = c.post(f"/outbox/{first['id']}/failed", json={"error": "old", "attempt": 1}, headers=AUTH)
+    assert late.status_code == 200
+    row = next(r for r in c.get("/outbox", headers=AUTH).json() if r["id"] == first["id"])
+    assert row["status"] == "leased" and row["last_error"] is None  # attempt 2 still owns it
+    c.post(f"/outbox/{first['id']}/failed", json={"error": "real", "attempt": 2}, headers=AUTH)
+    row = next(r for r in c.get("/outbox", headers=AUTH).json() if r["id"] == first["id"])
+    assert row["status"] == "retrying" and row["last_error"] == "real"
+
+
+def test_a_late_success_report_still_counts_because_the_message_really_went_out(live):
+    app, c, _ = live
+    first = pending(c)["items"][0]
+    app.state.clock = lambda: NOW + timedelta(minutes=11)
+    pending(c)  # handed out again
+    assert c.post(f"/outbox/{first['id']}/sent", headers=AUTH).json()["delivered"] is True

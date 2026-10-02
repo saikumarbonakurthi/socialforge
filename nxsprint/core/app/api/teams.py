@@ -106,13 +106,13 @@ def deliver_bot_job(request: Request, db: Session = Depends(get_db)) -> dict:
             else None
         )
         if conv is None:
-            mark_failed(db, row.id, "no stored conversation for this member", _now(request))
+            mark_failed(db, row.id, "no stored conversation for this member", _now(request), row.attempts)
             failed += 1
             continue
         try:
             state.bot.send_text(conv.service_url, conv.conversation_id, row.body)
         except Exception as exc:
-            mark_failed(db, row.id, f"{type(exc).__name__}: {str(exc)[:200]}", _now(request))
+            mark_failed(db, row.id, f"{type(exc).__name__}: {str(exc)[:200]}", _now(request), row.attempts)
             failed += 1
         else:
             mark_sent(db, row.id, _now(request))
@@ -134,7 +134,7 @@ def deliver_whatsapp_job(request: Request, db: Session = Depends(get_db)) -> dic
                 row.target, payload["template"], payload["language"], payload["params"]
             )
         except Exception as exc:  # the error text never contains the number, see WhatsAppClient
-            mark_failed(db, row.id, f"{type(exc).__name__}: {str(exc)[:200]}", _now(request))
+            mark_failed(db, row.id, f"{type(exc).__name__}: {str(exc)[:200]}", _now(request), row.attempts)
             failed += 1
         else:
             mark_sent(db, row.id, _now(request))

@@ -4,12 +4,12 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.config import AppConfig, ProjectCfg
 from app.domain.channels import BOT_CHANNEL, BOT_FOOTER
-from app.domain.delivery import LEASE, MAX_ATTEMPTS, DeliveryError
+from app.domain.delivery import LEASE, MAX_ATTEMPTS, DeliveryError, status_of
 from app.domain.sync import utc
 from app.models import Event, LlmCall, Nudge, Outbox, Project
 from app.settings import Mode
@@ -32,6 +32,7 @@ def dead_rows(session: Session, now: datetime) -> list[Outbox]:
             Outbox.attempts >= MAX_ATTEMPTS,
         )
         .order_by(Outbox.id)
+        .with_for_update(skip_locked=True)  # overlapping runs must not both fail over or alert the same row
     )
     return [r for r in rows if r.leased_at is None or utc(r.leased_at) < now - LEASE]
 
@@ -45,13 +46,17 @@ def _live(session: Session, outbox_id: int) -> Outbox:
     return row
 
 
-def retry_row(session: Session, outbox_id: int) -> Outbox:
-    """Put a dead or stuck row back in the queue with a fresh set of attempts, after the cause is fixed."""
+def retry_row(session: Session, outbox_id: int, now: datetime) -> Outbox:
+    """Put a dead or waiting row back in the queue with a fresh set of attempts, after the cause is fixed.
+
+    Refused for rows that are delivered, dismissed (a failed over bot message is dismissed, retrying it would
+    send it twice), currently leased (someone is posting it right now) or not failed yet.
+    """
     row = _live(session, outbox_id)
-    if row.delivered_at is not None:
-        raise DeliveryError("already delivered")
-    row.attempts, row.leased_at, row.next_attempt_at = 0, None, None
-    row.dead_alerted_at = row.dismissed_at = None
+    status = status_of(row, now)
+    if status not in ("dead", "retrying"):
+        raise DeliveryError(f"only dead or retrying rows can be retried, this one is {status}")
+    row.attempts, row.leased_at, row.next_attempt_at, row.dead_alerted_at = 0, None, None, None
     session.commit()
     return row
 
@@ -130,12 +135,22 @@ def process_dead_letters(session: Session, config: AppConfig, mode: Mode, now: d
     return run
 
 
+# Events that are only a log. Everything else (planning_prep, retro_prep, weekly_report, standup_summary) is
+# a once per sprint, week or day marker that stops a ceremony being sent twice, so it is never pruned.
+LOG_EVENT_TYPES = ("sync", "llm_budget_alert")
+
+
 def prune(session: Session, retention_days: int, now: datetime) -> dict[str, int]:
-    """Delete old bookkeeping rows. Nudges, snapshots, sprints and standups are history and are kept."""
+    """Delete old bookkeeping rows. Nudges, snapshots, sprints, standups and ceremony markers are kept."""
     cutoff = now - timedelta(days=retention_days)
     finished = (Outbox.mode != "live") | Outbox.delivered_at.is_not(None) | Outbox.dismissed_at.is_not(None)
     out = session.execute(delete(Outbox).where(Outbox.created_at < cutoff, finished)).rowcount
-    ev = session.execute(delete(Event).where(Event.created_at < cutoff)).rowcount
+    # The newest sync event per project is kept: it records which items have left the board.
+    newest_sync = select(func.max(Event.id)).where(Event.type == "sync").group_by(Event.project_id)
+    log_event = Event.type.in_(LOG_EVENT_TYPES) | Event.type.like("github.%")
+    ev = session.execute(
+        delete(Event).where(Event.created_at < cutoff, log_event, Event.id.not_in(newest_sync))
+    ).rowcount
     llm = session.execute(delete(LlmCall).where(LlmCall.created_at < cutoff)).rowcount
     session.commit()
     return {"outbox": out, "events": ev, "llm_calls": llm}

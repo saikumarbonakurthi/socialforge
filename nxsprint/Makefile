@@ -29,17 +29,19 @@ migrate:
 	cd core && alembic upgrade head
 
 smoke:
-	@set -a; . ./.env; set +a; \
+	@S=$$(grep '^NXSPRINT_API_SECRET=' .env | cut -d= -f2-); \
 	curl -fsS localhost:8000/health && echo && \
-	curl -fsS -H "Authorization: Bearer $$NXSPRINT_API_SECRET" localhost:8000/status
+	curl -fsS -H "Authorization: Bearer $$S" localhost:8000/status
 
+# Values in .env are literal (docker env_file format), so they are read by the containers, never sourced by a shell.
 backup:
-	@set -a; . ./.env; set +a; mkdir -p backups; \
-	f=backups/nxsprint-$$(date +%Y%m%d-%H%M%S).dump; \
-	docker compose exec -T postgres pg_dump -U $$POSTGRES_USER -d $$POSTGRES_DB -Fc > $$f && echo "wrote $$f"
+	@mkdir -p backups; f=backups/nxsprint-$$(date +%Y%m%d-%H%M%S).dump; \
+	docker compose exec -T postgres sh -c 'pg_dump -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Fc' > $$f.partial \
+	  && test -s $$f.partial && mv $$f.partial $$f && echo "wrote $$f" \
+	  || { rm -f $$f.partial; echo "backup failed, nothing was written"; exit 1; }
 
 # make restore FILE=backups/nxsprint-20260101-020000.dump   (replaces the current data, stop core first)
 restore:
-	@test -n "$(FILE)" || { echo "usage: make restore FILE=backups/<dump>"; exit 1; }
-	@set -a; . ./.env; set +a; \
-	docker compose exec -T postgres pg_restore -U $$POSTGRES_USER -d $$POSTGRES_DB --clean --if-exists < $(FILE)
+	@test -s "$(FILE)" || { echo "usage: make restore FILE=backups/<dump>  (file must exist and not be empty)"; exit 1; }
+	@docker compose exec -T postgres pg_restore --list < "$(FILE)" > /dev/null || { echo "not a valid dump, nothing restored"; exit 1; }
+	docker compose exec -T postgres sh -c 'pg_restore -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" --clean --if-exists' < "$(FILE)"

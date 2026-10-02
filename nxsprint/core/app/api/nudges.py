@@ -8,7 +8,15 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import fail_if_any, get_db, guarded, require_auth
 from app.domain.board import load_board
-from app.domain.delivery import DeliveryError, lease_pending, mark_failed, mark_sent, status_of
+from app.domain.delivery import (
+    STATUSES,
+    DeliveryError,
+    lease_pending,
+    mark_failed,
+    mark_sent,
+    status_clause,
+    status_of,
+)
 from app.domain.nudges import run_nudges
 from app.domain.rules import run_rules
 from app.domain.sync import utc
@@ -78,9 +86,12 @@ def get_outbox(
     cap = min(limit, 500)
     if status is None:
         rows = list(db.scalars(select(Outbox).order_by(Outbox.id.desc()).limit(cap)))
-    else:  # the status is computed, so scan recent rows and filter, e.g. status=dead
-        recent = db.scalars(select(Outbox).order_by(Outbox.id.desc()).limit(5000))
-        rows = [o for o in recent if status_of(o, now) == status][:cap]
+    else:
+        if status not in STATUSES:
+            raise HTTPException(422, f"status must be one of {', '.join(STATUSES)}")
+        rows = list(
+            db.scalars(select(Outbox).where(status_clause(status, now)).order_by(Outbox.id.desc()).limit(cap))
+        )
     return [
         {
             "id": o.id,
@@ -116,12 +127,16 @@ def outbox_pending(request: Request, limit: int = 20, db: Session = Depends(get_
     )
     return {
         "mode": state.settings.mode.value,
-        "items": [{"id": i.id, "webhook_url": i.webhook_url, "payload": i.payload} for i in items],
+        "items": [
+            {"id": i.id, "webhook_url": i.webhook_url, "payload": i.payload, "attempt": i.attempt}
+            for i in items
+        ],
     }
 
 
 class FailedBody(BaseModel):
     error: str = "delivery failed"
+    attempt: int | None = None  # the attempt number from /outbox/pending, so late reports are ignored
 
 
 def _outcome(fn, *args) -> dict:
@@ -143,7 +158,7 @@ def outbox_sent(outbox_id: int, request: Request, db: Session = Depends(get_db))
 @router.post("/outbox/{outbox_id}/failed")
 def outbox_failed(outbox_id: int, body: FailedBody, request: Request, db: Session = Depends(get_db)) -> dict:
     clock = getattr(request.app.state, "clock", lambda: datetime.now(UTC))
-    return _outcome(mark_failed, db, outbox_id, body.error, clock())
+    return _outcome(mark_failed, db, outbox_id, body.error, clock(), body.attempt)
 
 
 @router.get("/nudges")

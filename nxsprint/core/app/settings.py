@@ -43,8 +43,8 @@ class Settings(BaseSettings):
     whatsapp_token: str | None = None
     whatsapp_phone_number_id: str | None = None
     whatsapp_api_version: str | None = None  # e.g. v21.0, set it, Meta retires old versions
-    # Delete outbox, event and llm_call rows older than this. At least 30 days so the once per sprint and
-    # once per week markers are never pruned while still in use. Unset means keep everything.
+    # Delete finished outbox rows, log events (sync, budget alerts, webhooks) and llm_call rows older than this.
+    # The once per sprint, week and day markers are never pruned. Unset means keep everything.
     retention_days: int | None = Field(default=None, ge=30)
     github_token: str | None = None  # read-only scope for sync (rule 2)
     github_webhook_secret: str | None = None

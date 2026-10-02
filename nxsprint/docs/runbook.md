@@ -54,13 +54,13 @@ Narrower switches: remove `NXSPRINT_WHATSAPP_ENABLED` to stop WhatsApp only, uns
 |---|---|---|
 | n8n shows `cron-sync` failing, `last_sync_at` old | GitHub token expired or lost access to the project, or rate limit | Read the failed execution body (it names the project and error). Rotate `NXSPRINT_GITHUB_TOKEN`. Rate limits are retried automatically with backoff. |
 | No nudges | still `dry_run`; outside working hours or a holiday; cooldown; project not synced | `GET /projects/{id}/risk` shows what the rules see. `POST /jobs/nudges` response counts `deferred_outside_hours` and `skipped_cooldown`. |
-| Messages stuck as `retrying` or `dead` | Power Automate flow disabled or URL rotated, Teams outage | `GET /outbox?status=dead` shows `last_error`. Fix the cause, then retry (below). |
+| Messages stuck as `retrying` or `dead` | Power Automate flow disabled or URL rotated, Teams outage | `GET /outbox?status=dead` (or `retrying`) shows `last_error`. Fix the cause, then retry (below). |
 | Bot replies or DMs fail | bot secret expired (Entra secrets expire, usually in 6 to 24 months), wrong messaging endpoint, member never opened the bot | Rotate `NXSPRINT_BOT_APP_PASSWORD`. Bot messages that give up fail over to the webhook automatically. |
 | Everyone gets templates, not Claude wording | daily ceiling reached, or API errors | `GET /status` `llm.spent_today_usd`. The owner gets one alert per day. Raise `NXSPRINT_MAX_DAILY_USD` or wait for UTC midnight. Wording quality and prompts: `core/app/llm/prompts/nudge_v1.md`. |
 | WhatsApp rows `dead` | template not approved or renamed, token expired, bad number, daily cap | `last_error` carries Meta's message (never the number). Fix, then retry. The cap is `max_per_person_per_day`. |
 | Standup summary says "No reply yet" for everyone | members have not opened the bot, so they have no way to reply | `docs/teams-setup.md` step 4. |
 | n8n down | container crashed or host reboot | Compose restarts it. Jobs catch up on their own. Check `nxsprint_last_sync_age_seconds`. |
-| Core returns 500 on a job | one project failed, others ran | The response `detail.projects` marks which. The stack trace is in core's log, search for the project name. |
+| Core returns 500 or 502 on a job | one project failed, others ran. 502 means GitHub was the cause, 500 means our own error | The response `detail.projects` marks which. The stack trace is in core's log, search for the project name. |
 
 ## Dead letters
 A live message that fails 5 times is parked. Waits between attempts are 1, 5, 15 and 60 minutes, so a short outage is ridden out before anything is parked.
@@ -73,7 +73,9 @@ curl -s -H "Authorization: Bearer $S" "localhost:8000/outbox?status=dead"       
 curl -s -X POST -H "Authorization: Bearer $S" localhost:8000/outbox/42/retry        # cause fixed, try again (fresh 5 attempts)
 curl -s -X POST -H "Authorization: Bearer $S" localhost:8000/outbox/42/dismiss      # give up on purpose, kept for the record
 ```
-Only live rows can be retried or dismissed. `retry` also undoes a `dismiss`.
+`retry` works only on rows that are `dead` or `retrying`. It is refused for rows that are delivered, dismissed (including bot messages that were failed over, retrying one would send it twice), currently `leased` (someone is posting it right now, wait a few minutes) or not failed yet. A `dismiss` is final. Only live rows can be retried or dismissed.
+
+n8n reports each failure with the attempt number it was given. If a slow execution reports late, after the row was already handed out again, the old report is ignored so it cannot disturb the newer attempt.
 
 ## Secrets
 All live in `.env` (never committed) and are read at start, so every rotation means restarting core.
@@ -95,7 +97,7 @@ Webhook URLs and tokens are never logged (HTTP client logging is silenced) and p
 make backup                                   # writes backups/nxsprint-<time>.dump (pg_dump custom format)
 make restore FILE=backups/nxsprint-<time>.dump
 ```
-*Both targets are untested, this sandbox had no Docker.*
+`backup` writes to a temporary file and only keeps it if the dump succeeded and is not empty, `restore` first checks that the file is a readable dump. *Both targets are untested, this sandbox had no Docker.*
 
 Suggested routine: a nightly host cron (`0 2 * * * cd /path/to/nxsprint && make backup`), copy the dump off the machine, keep about 14 dailies, and do a test restore into a scratch copy once a quarter. At most a day of nudges, acks and standup replies is lost on a restore, snapshots older than the dump are safe.
 
@@ -109,7 +111,7 @@ Suggested routine: a nightly host cron (`0 2 * * * cd /path/to/nxsprint && make 
 Take a backup first. `git pull`, `make up`; migrations run when core starts. Rolling back code across a migration needs `alembic downgrade <revision>` run inside the core container before you start the old version, or a restore of the pre upgrade dump (simpler and safer).
 
 ## Housekeeping
-Set `NXSPRINT_RETENTION_DAYS` (30 or more) to prune old outbox, event and LLM call rows nightly through `cron-maintenance`. Nudges, snapshots, sprints and standups are history and are never deleted. Unset keeps everything.
+Set `NXSPRINT_RETENTION_DAYS` (30 or more) and `cron-maintenance` prunes, on its hourly run (cheap when nothing is old): finished outbox rows, log events (`sync`, budget alerts, webhook records) and LLM call rows older than that. The newest sync event per project is always kept, it records which items left the board. Nudges, snapshots, sprints, standups and the once per sprint, week and day ceremony markers are history and are never deleted. Unset keeps everything.
 
 ## Security notes
 - Every endpoint except `/health`, `/webhooks/github` (HMAC) and `/webhooks/teams` (Microsoft token) needs the bearer secret. A test walks the whole API to keep it that way.

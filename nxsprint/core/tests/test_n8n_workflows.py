@@ -91,3 +91,9 @@ def test_delivery_workflow_wiring():
     success, failure = wf["connections"]["Post to Teams"]["main"]
     assert [x["node"] for x in success] == ["Mark sent"] and [x["node"] for x in failure] == ["Mark failed"]
     assert nodes["Split items"]["parameters"]["fieldToSplitOut"] == "items"
+
+
+def test_failure_report_sends_the_attempt_number_back():
+    wf = load(WF_DIR / "deliver-outbox.json")
+    body = next(n for n in wf["nodes"] if n["name"] == "Mark failed")["parameters"]["jsonBody"]
+    assert "attempt: $('Split items').item.json.attempt" in body

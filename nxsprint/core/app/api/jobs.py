@@ -26,8 +26,8 @@ def run_sync(request: Request, db: Session = Depends(get_db)) -> dict:
             try:
                 data = client.fetch_project(cfg.github.org, cfg.github.project_number, cfg.fields)
             except GitHubError as exc:
-                results.append({"project": cfg.name, "error": str(exc), "failed": True})
+                results.append({"project": cfg.name, "error": str(exc), "failed": True, "upstream": True})
                 continue
             results.append(sync_project(db, cfg, data).__dict__)
-    fail_if_any(results, status=502)
+    fail_if_any(results)
     return {"projects": results}

@@ -28,7 +28,7 @@ The example file is full of placeholders and is marked `placeholder: true`, whic
 3. [ ] **Soak in `dry_run` for a few days.** Read `GET /outbox` daily. Judge tone, thresholds and who gets what. Nothing is sent.
 4. [ ] If using Claude wording: run `NXSPRINT_LIVE_LLM=1 pytest core/tests/golden/test_live.py -s` and read the output. Prose claims the validator cannot check (for example "this will miss the goal") only a human can catch.
 5. [ ] Go live on the test channel: `NXSPRINT_MODE=live` with `NXSPRINT_DELIVERY_REDIRECT_TARGET` set. Everything goes to the test target, prefixed with who it was meant for.
-6. [ ] Watch `nxsprint_outbox_rows`, dead letters and the owner alert. Practise `retry` and `dismiss` once.
+6. [ ] Watch `nxsprint_outbox_rows`, dead letters and the owner alert. Practise `retry` and `dismiss` once, and note that a dismiss is final.
 7. [ ] Only then remove the redirect. Enable the bot for members. Enable WhatsApp last, if at all.
 8. [ ] Set up backups and do one test restore (`docs/runbook.md`).
 

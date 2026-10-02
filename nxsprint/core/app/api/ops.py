@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app import __version__
 from app.api.deps import clock, get_db, require_auth
 from app.domain.deadletters import dismiss_row, process_dead_letters, prune, retry_row
-from app.domain.delivery import DeliveryError, status_of
+from app.domain.delivery import STATUSES, DeliveryError, status_clause, status_of
 from app.domain.sync import utc
 from app.llm.phraser import spent_today
 from app.models import Event, Nudge, Outbox, Project
@@ -20,11 +20,29 @@ router = APIRouter(dependencies=[Depends(require_auth)])
 
 def collect_stats(request: Request, db: Session) -> dict:
     state, now = request.app.state, clock(request)
+    settings = state.settings
+    head = {
+        "version": __version__,
+        "mode": settings.mode.value,
+        "features": {
+            "claude_wording": bool(settings.llm_model),
+            "teams_bot": settings.bot_enabled,
+            "whatsapp": settings.whatsapp_enabled,
+            "delivery_redirect": bool(settings.delivery_redirect_target),
+        },
+    }
     try:
         db.execute(text("SELECT 1"))
-        db_ok = True
     except Exception:
-        db_ok = False
+        db.rollback()  # report the outage instead of failing, so nxsprint_db_up can drop to 0 and alert
+        return {
+            **head,
+            "db": False,
+            "projects": [],
+            "outbox": {},
+            "nudges": {},
+            "llm": {"spent_today_usd": 0.0, "ceiling_usd": settings.max_daily_usd},
+        }
 
     projects = []
     for cfg in state.config.projects:
@@ -42,36 +60,16 @@ def collect_stats(request: Request, db: Session) -> dict:
             }
         )
 
-    outbox: Counter = Counter()
-    live_open = db.scalars(
-        select(Outbox).where(
-            Outbox.mode == "live", Outbox.delivered_at.is_(None), Outbox.dismissed_at.is_(None)
-        )
-    )
-    for row in live_open:
-        outbox[status_of(row, now)] += 1
-    outbox["delivered"] = (
-        db.scalar(select(func.count(Outbox.id)).where(Outbox.delivered_at.is_not(None))) or 0
-    )
-    outbox["dry_run"] = db.scalar(select(func.count(Outbox.id)).where(Outbox.mode != "live")) or 0
-    outbox["dismissed"] = (
-        db.scalar(select(func.count(Outbox.id)).where(Outbox.dismissed_at.is_not(None))) or 0
-    )
-
+    # One COUNT per status, in SQL, so a scrape stays cheap however many rows there are.
+    outbox = {
+        st: db.scalar(select(func.count(Outbox.id)).where(status_clause(st, now))) or 0 for st in STATUSES
+    }
     nudges = dict(db.execute(select(Nudge.status, func.count(Nudge.id)).group_by(Nudge.status)).all())
-    settings = state.settings
     return {
-        "version": __version__,
-        "mode": settings.mode.value,
-        "db": db_ok,
-        "features": {
-            "claude_wording": bool(settings.llm_model),
-            "teams_bot": settings.bot_enabled,
-            "whatsapp": settings.whatsapp_enabled,
-            "delivery_redirect": bool(settings.delivery_redirect_target),
-        },
+        **head,
+        "db": True,
         "projects": projects,
-        "outbox": dict(outbox),
+        "outbox": outbox,
         "nudges": nudges,
         "llm": {"spent_today_usd": round(spent_today(db, now), 6), "ceiling_usd": settings.max_daily_usd},
     }
@@ -144,7 +142,7 @@ def prune_job(request: Request, db: Session = Depends(get_db)) -> dict:
 
 @router.post("/outbox/{outbox_id}/retry")
 def retry(outbox_id: int, request: Request, db: Session = Depends(get_db)) -> dict:
-    row = _call(retry_row, db, outbox_id)
+    row = _call(retry_row, db, outbox_id, clock(request))
     return {"id": row.id, "status": status_of(row, clock(request)), "attempts": row.attempts}
 
 

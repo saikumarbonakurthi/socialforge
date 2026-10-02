@@ -25,6 +25,7 @@ class DeliveryItem:
     id: int
     webhook_url: str
     payload: dict
+    attempt: int  # which try this is, sent back on failure so a stale report cannot disturb a newer lease
 
 
 def status_of(row: Outbox, now: datetime) -> str:
@@ -41,6 +42,29 @@ def status_of(row: Outbox, now: datetime) -> str:
     if row.next_attempt_at is not None and utc(row.next_attempt_at) > now:
         return "retrying"
     return "pending"
+
+
+def status_clause(status: str, now: datetime):
+    """SQL condition for a delivery status. Must agree with status_of, a test checks every combination."""
+    live = Outbox.mode == "live"
+    open_ = live & Outbox.delivered_at.is_(None) & Outbox.dismissed_at.is_(None)
+    lease_over = Outbox.leased_at.is_(None) | (Outbox.leased_at < now - LEASE)
+    dead = open_ & (Outbox.attempts >= MAX_ATTEMPTS) & lease_over
+    leased = open_ & ~dead & Outbox.leased_at.is_not(None) & (Outbox.leased_at >= now - LEASE)
+    retrying = open_ & ~dead & ~leased & Outbox.next_attempt_at.is_not(None) & (Outbox.next_attempt_at > now)
+    clauses = {
+        "dry_run": Outbox.mode != "live",
+        "delivered": live & Outbox.delivered_at.is_not(None),
+        "dismissed": live & Outbox.delivered_at.is_(None) & Outbox.dismissed_at.is_not(None),
+        "dead": dead,
+        "leased": leased,
+        "retrying": retrying,
+        "pending": open_ & ~dead & ~leased & ~retrying,
+    }
+    return clauses[status]
+
+
+STATUSES = ("dry_run", "delivered", "dismissed", "dead", "leased", "retrying", "pending")
 
 
 def check_live_ready(config: AppConfig, env: Mapping[str, str]) -> None:
@@ -105,7 +129,9 @@ def lease_pending(
         if redirect_target:
             target = redirect_target
             text = f"Test redirect, this was meant for {row.target}. {row.body}"
-        items.append(DeliveryItem(row.id, url, {"channel": row.channel, "target": target, "text": text}))
+        items.append(
+            DeliveryItem(row.id, url, {"channel": row.channel, "target": target, "text": text}, row.attempts)
+        )
     session.commit()
     return items
 
@@ -162,8 +188,14 @@ def _release(row: Outbox, error: str, now: datetime) -> None:
         row.next_attempt_at = None  # dead: nothing is scheduled
 
 
-def mark_failed(session: Session, outbox_id: int, error: str, now: datetime) -> Outbox:
+def mark_failed(
+    session: Session, outbox_id: int, error: str, now: datetime, attempt: int | None = None
+) -> Outbox:
+    """Record a failed attempt. A report for an older attempt than the current one is ignored: the row has
+    already been handed out again, and clearing that newer lease could get it sent twice."""
     row = _live_row(session, outbox_id)
+    if attempt is not None and attempt != row.attempts:
+        return row
     if row.delivered_at is None:
         _release(row, error, now)
         session.commit()

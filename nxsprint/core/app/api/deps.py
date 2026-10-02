@@ -61,7 +61,11 @@ def guarded(db: Session, name: str, out: list):
         out.append({"project": name, "error": "failed, see the logs", "failed": True})
 
 
-def fail_if_any(out: list, status: int = 500) -> None:
-    """After every project has been tried: a non 2xx response so n8n marks the execution as failed."""
+def fail_if_any(out: list) -> None:
+    """After every project has been tried: a non 2xx response so n8n marks the execution as failed.
+
+    502 when the cause was an upstream service (GitHub), 500 for anything that is our own fault.
+    """
     if any(r.get("failed") for r in out):
+        status = 502 if any(r.get("upstream") for r in out) else 500
         raise HTTPException(status, detail={"projects": out})
