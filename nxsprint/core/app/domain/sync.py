@@ -120,6 +120,7 @@ def sync_project(
             project_id=project.id,
             issue_node_id=item.issue_node_id,
             title=item.title,
+            url=item.url,
             status=item.status,
             assignee_login=item.assignee_login,
             estimate=item.estimate,

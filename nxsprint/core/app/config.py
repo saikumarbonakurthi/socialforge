@@ -108,6 +108,8 @@ class Thresholds(_Strict):
     blocked_label_working_days: int = Field(gt=0)
     max_parallel_in_progress: int = Field(gt=0)
     sprint_risk_no_done_working_days: int = Field(gt=0)
+    # Flag when points left (percent) exceeds working days left (percent) by this much.
+    sprint_risk_gap_pct: int = Field(gt=0, le=100)
     blocked_label: str
 
 

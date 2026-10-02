@@ -7,14 +7,18 @@ shows the board NxSprint would reason about, including how long each item sat in
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
 from app.config import load_config
 from app.db import make_engine, make_session_factory
-from app.domain.sync import status_since, sync_project
+from app.domain.board import load_board
+from app.domain.calendar import is_working_day, working_days_between
+from app.domain.nudges import run_nudges
+from app.domain.sync import sync_project
 from app.integrations.github import ProjectData, WorkItem
-from app.models import Base, WorkItemSnapshot
+from app.models import Base, Member, Project
 from app.settings import Mode
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "config" / "projects.example.yaml"
@@ -69,6 +73,15 @@ def board(now: datetime, moved: bool) -> ProjectData:
     return ProjectData("PVT_demo", items)
 
 
+def demo_clock(cfg) -> datetime:
+    """Latest working day at 11:00 project time, so the demo always lands inside working hours."""
+    tz = ZoneInfo(cfg.timezone)
+    day = datetime.now(tz).replace(hour=11, minute=0, second=0, microsecond=0)
+    while not is_working_day(day.date(), cfg):
+        day -= timedelta(days=1)
+    return day.astimezone(UTC)
+
+
 def main() -> int:
     cfg_path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_CONFIG
     cfg = load_config(cfg_path, Mode.DRY_RUN).projects[0]
@@ -76,27 +89,33 @@ def main() -> int:
     Base.metadata.create_all(engine)
     session = make_session_factory(engine)()
 
-    now = datetime.now(UTC)
+    now = demo_clock(cfg)
     # Two syncs, four days apart, so "days in status" has something to show.
-    first = sync_project(session, cfg, board(now, moved=False), now - timedelta(days=4))
+    sync_project(session, cfg, board(now, moved=False), now - timedelta(days=4))
     second = sync_project(session, cfg, board(now, moved=True), now)
     print(f"Project: {cfg.name}   (dry run, nothing is sent anywhere)")
-    print(f"Sync 1: {first.items_seen} items, {first.snapshots_written} snapshots")
-    print(f"Sync 2: {second.items_seen} items, {second.snapshots_written} snapshot changed\n")
+    print(f"Demo clock: {now.astimezone(ZoneInfo(cfg.timezone)):%a %d %b %H:%M} {cfg.timezone}")
+    print(f"Sync 2 changed {second.snapshots_written} of {second.items_seen} items\n")
 
     print(f"{'ISSUE':<28}{'STATUS':<13}{'OWNER':<11}{'PTS':<5}{'IN STATUS':<11}LABELS")
-    latest = {}
-    for s in session.scalars(select(WorkItemSnapshot).order_by(WorkItemSnapshot.id)):
-        latest[s.issue_node_id] = s
-    for s in latest.values():
-        _, since = status_since(session, s.issue_node_id)
-        days = (now - since).days
+    for item in load_board(session, session.scalar(select(Project)), cfg, now).items:
+        days = working_days_between(item.status_since, now, cfg)
         print(
-            f"{s.title[:26]:<28}{s.status:<13}{s.assignee_login or '(none)':<11}"
-            f"{'' if s.estimate is None else s.estimate:<5}{f'{days}d+':<11}{','.join(s.labels)}"
+            f"{item.title[:26]:<28}{item.status:<13}{item.assignee_login or '(none)':<11}"
+            f"{'' if item.estimate is None else item.estimate:<5}{f'{days} wd+':<11}{','.join(item.labels)}"
         )
-    print("\n'N d+' means at least N days: we only know since our first sync.")
-    print("Rules that would flag items here (unowned, no estimate, blocked, stale) arrive in Phase 2.")
+    print("\n'N wd+' means at least N working days: we only know since our first sync.\n")
+
+    project = session.scalar(select(Project))
+    run = run_nudges(session, project, cfg, Mode.DRY_RUN, now)
+    print(f"Rules found {run.findings} issues. Messages NxSprint would send:\n")
+    members = {m.id: m for m in session.scalars(select(Member))}
+    for n in run.created:
+        who = members[n.member_id]
+        print(f"[{n.rule}] to {who.name} ({who.role}) via {n.channel}\n  {n.message}\n")
+    again = run_nudges(session, project, cfg, Mode.DRY_RUN, now)
+    created, skipped = len(again.created), again.skipped_cooldown
+    print(f"Running again straight away creates {created} (skipped {skipped} on cooldown).")
     return 0
 
 

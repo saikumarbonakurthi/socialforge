@@ -54,6 +54,7 @@ class WorkItemSnapshot(Base):
     project_id: Mapped[int] = mapped_column(ForeignKey("project.id"), index=True)
     issue_node_id: Mapped[str] = mapped_column(String(100), index=True)
     title: Mapped[str] = mapped_column(Text)
+    url: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str | None] = mapped_column(String(100))
     assignee_login: Mapped[str | None] = mapped_column(String(100))
     estimate: Mapped[float | None] = mapped_column(Float)

@@ -31,6 +31,7 @@ projects:
       blocked_label_working_days: 2
       max_parallel_in_progress: 3
       sprint_risk_no_done_working_days: 3
+      sprint_risk_gap_pct: 25
       blocked_label: blocked
     escalation: {ack_hours_before_channel: 4, ack_hours_before_lead: 8}
     channels:

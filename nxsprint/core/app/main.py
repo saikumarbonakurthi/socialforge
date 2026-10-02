@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 
-from app.api import health, jobs, webhooks
+from app.api import health, jobs, nudges, webhooks
 from app.config import load_config
 from app.db import make_engine, make_session_factory
 from app.logging import configure_logging, request_id_var
@@ -49,6 +49,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(jobs.router)
+    app.include_router(nudges.router)
     app.include_router(webhooks.router)
     return app
 
