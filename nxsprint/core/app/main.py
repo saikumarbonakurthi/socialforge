@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -8,10 +9,11 @@ from fastapi import FastAPI, Request
 from app.api import health, jobs, nudges, webhooks
 from app.config import load_config
 from app.db import make_engine, make_session_factory
+from app.domain.delivery import check_live_ready
 from app.llm.client import AnthropicLLM
 from app.llm.phraser import Phraser
 from app.logging import configure_logging, request_id_var
-from app.settings import Settings, get_settings
+from app.settings import Mode, Settings, get_settings
 
 log = logging.getLogger("nxsprint")
 
@@ -24,6 +26,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.settings = cfg_settings
         # Fails loudly on bad config (section 5).
         app.state.config = load_config(cfg_settings.config_path, cfg_settings.mode)
+        if cfg_settings.mode is Mode.LIVE:
+            check_live_ready(app.state.config, os.environ)  # fail loudly before anything can be sent
         # Claude wording is off unless NXSPRINT_MODEL is set (Settings then demands a ceiling and prices).
         app.state.phraser = (
             Phraser(

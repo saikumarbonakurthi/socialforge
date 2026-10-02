@@ -92,11 +92,18 @@ class Nudge(Base):
 class Outbox(Base):
     __tablename__ = "outbox"
     id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("project.id"))
+    nudge_id: Mapped[int | None] = mapped_column(ForeignKey("nudge.id"), index=True)
     channel: Mapped[str] = mapped_column(String(30))
     target: Mapped[str] = mapped_column(String(200))
     body: Mapped[str] = mapped_column(Text)
     mode: Mapped[str] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # Delivery tracking (Phase 4). Only live rows are ever leased for delivery.
+    leased_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
 
 
 class Escalation(Base):

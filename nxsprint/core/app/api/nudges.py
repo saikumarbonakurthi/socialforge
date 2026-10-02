@@ -1,11 +1,14 @@
+import os
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_auth
 from app.domain.board import load_board
+from app.domain.delivery import DeliveryError, lease_pending, mark_failed, mark_sent, status_of
 from app.domain.nudges import run_nudges
 from app.domain.rules import run_rules
 from app.domain.sync import utc
@@ -63,7 +66,8 @@ def run_nudge_job(request: Request, db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/outbox")
-def get_outbox(limit: int = 100, db: Session = Depends(get_db)) -> list[dict]:
+def get_outbox(request: Request, limit: int = 100, db: Session = Depends(get_db)) -> list[dict]:
+    now = getattr(request.app.state, "clock", lambda: datetime.now(UTC))()
     rows = db.scalars(select(Outbox).order_by(Outbox.id.desc()).limit(min(limit, 500)))
     return [
         {
@@ -72,10 +76,59 @@ def get_outbox(limit: int = 100, db: Session = Depends(get_db)) -> list[dict]:
             "target": o.target,
             "body": o.body,
             "mode": o.mode,
+            "status": status_of(o, now),
+            "attempts": o.attempts,
+            "last_error": o.last_error,
             "created_at": _ts(o.created_at),
+            "delivered_at": _ts(o.delivered_at),
         }
         for o in rows
     ]
+
+
+@router.get("/outbox/pending")
+def outbox_pending(request: Request, limit: int = 20, db: Session = Depends(get_db)) -> dict:
+    """For n8n. Leases live rows and returns where to post them. Always empty in dry_run."""
+    state = request.app.state
+    clock = getattr(state, "clock", lambda: datetime.now(UTC))
+    items = lease_pending(
+        db,
+        state.config,
+        state.settings.mode,
+        getattr(state, "env", os.environ),
+        state.settings.delivery_redirect_target,
+        clock(),
+        min(limit, 100),
+    )
+    return {
+        "mode": state.settings.mode.value,
+        "items": [{"id": i.id, "webhook_url": i.webhook_url, "payload": i.payload} for i in items],
+    }
+
+
+class FailedBody(BaseModel):
+    error: str = "delivery failed"
+
+
+def _outcome(fn, *args) -> dict:
+    try:
+        row = fn(*args)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except DeliveryError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"id": row.id, "delivered": row.delivered_at is not None, "attempts": row.attempts}
+
+
+@router.post("/outbox/{outbox_id}/sent")
+def outbox_sent(outbox_id: int, request: Request, db: Session = Depends(get_db)) -> dict:
+    clock = getattr(request.app.state, "clock", lambda: datetime.now(UTC))
+    return _outcome(mark_sent, db, outbox_id, clock())
+
+
+@router.post("/outbox/{outbox_id}/failed")
+def outbox_failed(outbox_id: int, body: FailedBody, db: Session = Depends(get_db)) -> dict:
+    return _outcome(mark_failed, db, outbox_id, body.error)
 
 
 @router.get("/nudges")

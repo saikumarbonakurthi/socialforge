@@ -2,7 +2,7 @@
 
 AI scrum master for SRIA Infotech. Reads GitHub Projects v2, detects problems with deterministic rules, nudges the right person, prepares ceremonies. Dry-run by default. Humans stay accountable.
 
-Status: **Phase 3** (sync, rules, nudges, outbox, Claude wording; dry run). No Teams delivery yet.
+Status: **Phase 4** (sync, rules, nudges, Claude wording, n8n workflows, Teams outbound; dry run by default). No two way Teams yet.
 
 ## Layout
 `core/` FastAPI service (`app/{api,domain,integrations,llm,jobs}`, `alembic/`, `tests/`), `n8n/workflows/`, `config/`, `docs/`.
@@ -22,6 +22,8 @@ Nudges: `POST /jobs/nudges` runs the 7 rules, applies cooldowns, working hours (
 Findings with no owner (unassigned item, sprint at risk) go to the project lead. `PR_WAITING_REVIEW` is implemented and tested but dormant: the sync does not fetch PR review data yet.
 
 Wording (Phase 3): rules decide who and why; Claude only phrases. Off by default. Set `NXSPRINT_MODEL`, `NXSPRINT_MAX_DAILY_USD` and both `NXSPRINT_PRICE_*` variables to turn it on (startup refuses a model without a ceiling and prices). Each message is checked (greeting, length, no dashes, no invented numbers, links or mentions, title kept, link placeholder used once); one retry, then the deterministic template is sent instead. Only issue titles, status names, counts and first names are sent to the model, never logins or links (the real link is substituted after validation). Every call is logged to `llm_call` with tokens and an estimated cost; when the day's ceiling is hit, templates are used and the owner gets one alert in the outbox. Prompt: `core/app/llm/prompts/nudge_v1.md`. Golden set: `core/tests/golden/` (offline), and `NXSPRINT_LIVE_LLM=1 pytest tests/golden/test_live.py -s` runs it against the real model (costs money).
+
+Delivery (Phase 4): in `dry_run` nothing is ever sent. In `live`, the `deliver-outbox` n8n workflow fetches leased rows from `GET /outbox/pending`, posts them to the Power Automate webhook, and reports back (`POST /outbox/{id}/sent` or `/failed`, 5 attempts then dead). Live mode refuses to start without an https webhook, and `NXSPRINT_DELIVERY_REDIRECT_TARGET` sends everything to a test target first. See `docs/n8n.md` and `docs/teams-outbound.md`.
 
 Dev without Docker (Python 3.12): `make install && make migrate && make test && make lint`.
 

@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     # No built in prices: the model is env driven, so its prices are too (USD per million tokens).
     price_input_per_mtok: float | None = Field(default=None, gt=0)
     price_output_per_mtok: float | None = Field(default=None, gt=0)
+    # While set, live delivery sends every message to this target instead of the real person.
+    delivery_redirect_target: str | None = None
     github_token: str | None = None  # read-only scope for sync (rule 2)
     github_webhook_secret: str | None = None
 

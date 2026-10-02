@@ -105,9 +105,18 @@ def run_nudges(
             created_at=now,
         )
         session.add(nudge)
-        # In dry_run this row is the only effect; delivery (Phase 4) reads it in live mode.
+        session.flush()
+        # In dry_run this row is the only effect. Live rows are picked up by delivery (n8n).
         session.add(
-            Outbox(channel=CHANNEL, target=target.teams_user_id, body=body, mode=mode.value, created_at=now)
+            Outbox(
+                project_id=project.id,
+                nudge_id=nudge.id,
+                channel=CHANNEL,
+                target=target.teams_user_id,
+                body=body,
+                mode=mode.value,
+                created_at=now,
+            )
         )
         session.flush()
         run.created.append(nudge)
